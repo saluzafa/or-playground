@@ -53,6 +53,7 @@ const settings = reactive({
 const presetDirectoryHandle = ref<FileSystemDirectoryHandle | null>(null)
 
 const canUseDirectoryApi = computed(() => typeof window !== 'undefined' && 'showDirectoryPicker' in window)
+const hasConnectedDirectory = computed(() => !!presetDirectoryHandle.value)
 
 const selectedPreset = computed(() => presets.value.find((preset) => preset.id === selectedPresetId.value) ?? null)
 const filteredModelSuggestions = computed(() => {
@@ -100,8 +101,8 @@ async function idbSet(key: string, value: unknown) {
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
     tx.objectStore(STORE_NAME).put(value, key)
-    tx.oncomplete = () => { console.log("DIR_HANDLE OK"); resolve(); }
-    tx.onerror = () => { console.log(tx.error); reject(tx.error) }
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
   })
   db.close()
 }
@@ -116,6 +117,17 @@ async function idbGet<T>(key: string): Promise<T | null> {
   })
   db.close()
   return result
+}
+
+async function idbDelete(key: string) {
+  const db = await openDb()
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    tx.objectStore(STORE_NAME).delete(key)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+  db.close()
 }
 
 function safeParse<T>(value: string | null, fallback: T): T {
@@ -305,6 +317,15 @@ async function connectPresetDirectory() {
     }
     errorMessage.value = error instanceof Error ? error.message : 'Unable to connect directory.'
   }
+}
+
+async function disconnectPresetDirectory() {
+  presetDirectoryHandle.value = null
+  directoryLabel.value = 'No directory connected'
+  selectedPresetId.value = ''
+  presets.value = []
+  errorMessage.value = ''
+  await idbDelete(DIRECTORY_HANDLE_KEY)
 }
 
 async function writePreset(preset: PromptPreset) {
@@ -626,9 +647,9 @@ onBeforeUnmount(() => {
               type="button"
               class="flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed"
               :disabled="!canUseDirectoryApi"
-              @click="connectPresetDirectory"
+              @click="hasConnectedDirectory ? disconnectPresetDirectory() : connectPresetDirectory()"
             >
-              Connect Directory
+              {{ hasConnectedDirectory ? 'Disconnect Directory' : 'Connect Directory' }}
             </button>
             <button
               type="button"
