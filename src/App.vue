@@ -695,7 +695,24 @@ function sendPromptOnShortcut(event: KeyboardEvent) {
   void sendPrompt()
 }
 
+function swallowSaveShortcut(event: KeyboardEvent) {
+  if (event.key.toLowerCase() !== 's') {
+    return false
+  }
+  if (!(event.metaKey || event.ctrlKey)) {
+    return false
+  }
+
+  event.preventDefault()
+  event.stopPropagation()
+  event.stopImmediatePropagation()
+  return true
+}
+
 function handleWindowKeydown(event: KeyboardEvent) {
+  if (swallowSaveShortcut(event)) {
+    return
+  }
   sendPromptOnShortcut(event)
 }
 
