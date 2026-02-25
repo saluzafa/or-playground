@@ -18,6 +18,14 @@ interface OpenRouterModel {
   name: string
 }
 
+interface OpenRouterUsage {
+  promptTokens: number | null
+  completionTokens: number | null
+  totalTokens: number | null
+  cost: number | string | null
+  cachedTokens: number | null
+}
+
 const DB_NAME = 'or-playground-db'
 const DB_VERSION = 2
 const STORE_NAME = 'app-kv'
@@ -29,6 +37,7 @@ const systemMessage = ref('You are a helpful assistant.')
 const userMessage = ref('')
 const responseText = ref('')
 const responseJson = ref('')
+const responseUsage = ref<OpenRouterUsage | null>(null)
 const errorMessage = ref('')
 const isSending = ref(false)
 const showSettings = ref(false)
@@ -442,6 +451,41 @@ async function deleteSelectedPreset() {
   }
 }
 
+function toNumberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function toCostOrNull(value: unknown): number | string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string' && value.trim()) {
+    return value
+  }
+  return null
+}
+
+function extractUsage(payload: unknown): OpenRouterUsage | null {
+  const usage = payload && typeof payload === 'object' ? (payload as { usage?: unknown }).usage : null
+  if (!usage || typeof usage !== 'object') {
+    return null
+  }
+
+  const usageRecord = usage as Record<string, unknown>
+  const promptTokenDetails =
+    usageRecord.prompt_tokens_details && typeof usageRecord.prompt_tokens_details === 'object'
+      ? (usageRecord.prompt_tokens_details as Record<string, unknown>)
+      : null
+
+  return {
+    promptTokens: toNumberOrNull(usageRecord.prompt_tokens),
+    completionTokens: toNumberOrNull(usageRecord.completion_tokens),
+    totalTokens: toNumberOrNull(usageRecord.total_tokens),
+    cost: toCostOrNull(usageRecord.cost),
+    cachedTokens: toNumberOrNull(promptTokenDetails?.cached_tokens),
+  }
+}
+
 async function sendPrompt() {
   if (!canSend.value) {
     return
@@ -449,6 +493,7 @@ async function sendPrompt() {
 
   isSending.value = true
   errorMessage.value = ''
+  responseUsage.value = null
 
   try {
     const messages: Array<{ role: 'system' | 'user'; content: string }> = []
@@ -487,6 +532,7 @@ async function sendPrompt() {
     const content = payload?.choices?.[0]?.message?.content
     responseText.value = toTextContent(content) || '[No text content in model response]'
     responseJson.value = JSON.stringify(payload, null, 2)
+    responseUsage.value = extractUsage(payload)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Request failed.'
   } finally {
@@ -728,6 +774,16 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="space-y-4">
+            <div>
+              <h2 class="mb-2 text-sm font-semibold">Response Usage</h2>
+              <div class="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-800">
+                <div>prompt_tokens: {{ responseUsage?.promptTokens ?? 'N/A' }}</div>
+                <div>completion_tokens: {{ responseUsage?.completionTokens ?? 'N/A' }}</div>
+                <div>total_tokens: {{ responseUsage?.totalTokens ?? 'N/A' }}</div>
+                <div>cost: {{ responseUsage?.cost ?? 'N/A' }}</div>
+                <div>prompt_tokens_details.cached_tokens: {{ responseUsage?.cachedTokens ?? 'N/A' }}</div>
+              </div>
+            </div>
             <div>
               <h2 class="mb-2 text-sm font-semibold">Response (Text)</h2>
               <pre class="min-h-52 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100">{{ responseText }}</pre>
