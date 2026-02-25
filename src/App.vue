@@ -33,6 +33,7 @@ interface OpenRouterUsage {
   totalTokens: number | null
   cost: number | string | null
   cachedTokens: number | null
+  requestDurationSeconds: number | null
 }
 
 const DB_NAME = 'or-playground-db'
@@ -559,10 +560,17 @@ function toCostOrNull(value: unknown): number | string | null {
   return null
 }
 
-function extractUsage(payload: unknown): OpenRouterUsage | null {
+function extractUsage(payload: unknown, requestDurationSeconds: number | null): OpenRouterUsage {
   const usage = payload && typeof payload === 'object' ? (payload as { usage?: unknown }).usage : null
   if (!usage || typeof usage !== 'object') {
-    return null
+    return {
+      promptTokens: null,
+      completionTokens: null,
+      totalTokens: null,
+      cost: null,
+      cachedTokens: null,
+      requestDurationSeconds,
+    }
   }
 
   const usageRecord = usage as Record<string, unknown>
@@ -577,6 +585,7 @@ function extractUsage(payload: unknown): OpenRouterUsage | null {
     totalTokens: toNumberOrNull(usageRecord.total_tokens),
     cost: toCostOrNull(usageRecord.cost),
     cachedTokens: toNumberOrNull(promptTokenDetails?.cached_tokens),
+    requestDurationSeconds,
   }
 }
 
@@ -600,6 +609,16 @@ function formatUsageCost(value: number | string | null): string {
   return value
 }
 
+function formatUsageDuration(value: number | null): string {
+  if (value === null) {
+    return 'N/A'
+  }
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
 async function sendPrompt() {
   if (!canSend.value) {
     return
@@ -616,6 +635,7 @@ async function sendPrompt() {
     }
     messages.push({ role: 'user', content: userMessage.value.trim() })
 
+    const requestStartedAt = performance.now()
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -636,6 +656,7 @@ async function sendPrompt() {
           : {}),
       }),
     })
+    const requestDurationSeconds = (performance.now() - requestStartedAt) / 1000
 
     const payload = await response.json()
 
@@ -650,7 +671,7 @@ async function sendPrompt() {
     const content = payload?.choices?.[0]?.message?.content
     responseText.value = toTextContent(content) || '[No text content in model response]'
     responseJson.value = JSON.stringify(payload, null, 2)
-    responseUsage.value = extractUsage(payload)
+    responseUsage.value = extractUsage(payload, requestDurationSeconds)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Request failed.'
   } finally {
@@ -668,6 +689,10 @@ function sendPromptOnShortcut(event: KeyboardEvent) {
 
   event.preventDefault()
   void sendPrompt()
+}
+
+function handleWindowKeydown(event: KeyboardEvent) {
+  sendPromptOnShortcut(event)
 }
 
 async function loadOpenRouterModels() {
@@ -799,30 +824,32 @@ onMounted(async () => {
   void loadOpenRouterModels()
 
   window.addEventListener('focus', syncPresetsFromDirectory)
+  window.addEventListener('keydown', handleWindowKeydown)
 })
 
 onBeforeUnmount(() => {
   setAutoSync(false)
   clearPresetAutoSaveTimer()
   window.removeEventListener('focus', syncPresetsFromDirectory)
+  window.removeEventListener('keydown', handleWindowKeydown)
 })
 </script>
 
 <template>
   <div class="text-slate-900">
     <div class="mx-auto flex w-full max-w-full flex-col gap-6">
-      <header class="flex flex-wrap items-center justify-between gap-4 bg-white/70 p-6">
+      <header class="flex flex-wrap items-center justify-between gap-4 bg-slate-800 text-white p-6">
         <div>
-          <h1 class="text-2xl font-black tracking-tight">OpenRouter Playground</h1>
-          <p class="text-sm text-slate-600">Experiment with models, prompts, and reusable local presets.</p>
+          <h1 class="text-2xl tracking-tight">OpenRouter Playground</h1>
+          <p class="text-sm text-slate-400">Experiment with models, prompts, and reusable local presets.</p>
         </div>
         <button
           type="button"
-          class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+          class="rounded-xl bg-rose-900 px-4 py-2 text-2xl font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
           :disabled="isSending || !canSend"
           @click="sendPrompt"
         >
-          {{ isSending ? 'Sending…' : 'Send Request' }}
+          {{ isSending ? 'Sending…' : 'Execute Request' }}
         </button>
       </header>
 
@@ -867,8 +894,8 @@ onBeforeUnmount(() => {
                 <span class="mb-1 block text-sm font-semibold">System Message</span>
                 <textarea
                   v-model="systemMessage"
-                  class="h-[20vh] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
-                  @keydown="sendPromptOnShortcut"
+                  rows="15"
+                  class="text-sm font-mono w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
                 />
               </label>
 
@@ -876,8 +903,8 @@ onBeforeUnmount(() => {
                 <span class="mb-1 block text-sm font-semibold">User Message</span>
                 <textarea
                   v-model="userMessage"
-                  class="h-[30vh] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
-                  @keydown="sendPromptOnShortcut"
+                  rows="15"
+                  class="text-sm font-mono w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
                 />
               </label>
 
@@ -912,6 +939,10 @@ onBeforeUnmount(() => {
                       <div class="rounded-xl border border-slate-100 bg-slate-50/70 py-1 px-2">
                         <p class="font-semibold uppercase tracking-[0.08em] text-slate-700">Cached</p>
                         <p class="mt-1 font-mono font-bold text-slate-950">{{ formatUsageNumber(responseUsage?.cachedTokens ?? null) }}</p>
+                      </div>
+                      <div class="rounded-xl border border-fuchsia-100 bg-fuchsia-50/70 py-1 px-2">
+                        <p class="font-semibold uppercase tracking-[0.08em] text-fuchsia-700">Time</p>
+                        <p class="mt-1 font-mono font-bold text-fuchsia-950">{{ formatUsageDuration(responseUsage?.requestDurationSeconds ?? null) }}s</p>
                       </div>
                     </div>
                   </div>
