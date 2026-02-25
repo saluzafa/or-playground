@@ -13,6 +13,11 @@ interface PromptPreset {
   filename: string
 }
 
+interface OpenRouterModel {
+  id: string
+  name: string
+}
+
 const DB_NAME = 'or-playground-db'
 const DB_VERSION = 1
 const STORE_NAME = 'app-kv'
@@ -26,6 +31,10 @@ const responseJson = ref('')
 const errorMessage = ref('')
 const isSending = ref(false)
 const showSettings = ref(false)
+const isModelInputFocused = ref(false)
+const isLoadingModels = ref(false)
+const modelLoadError = ref('')
+const openRouterModels = ref<OpenRouterModel[]>([])
 
 const presetName = ref('')
 const selectedPresetId = ref('')
@@ -45,6 +54,17 @@ const presetDirectoryHandle = ref<FileSystemDirectoryHandle | null>(null)
 const canUseDirectoryApi = computed(() => typeof window !== 'undefined' && 'showDirectoryPicker' in window)
 
 const selectedPreset = computed(() => presets.value.find((preset) => preset.id === selectedPresetId.value) ?? null)
+const filteredModelSuggestions = computed(() => {
+  const query = model.value.trim().toLowerCase()
+  const source = openRouterModels.value
+
+  if (!query) {
+    return source.slice(0, 12)
+  }
+
+  return source.filter((entry) => entry.id.toLowerCase().includes(query) || entry.name.toLowerCase().includes(query)).slice(0, 12)
+})
+const showModelSuggestions = computed(() => isModelInputFocused.value && filteredModelSuggestions.value.length > 0)
 
 const canSend = computed(() => !!settings.apiKey.trim() && !!model.value.trim() && !!userMessage.value.trim())
 
@@ -367,6 +387,39 @@ async function sendPrompt() {
   }
 }
 
+async function loadOpenRouterModels() {
+  isLoadingModels.value = true
+  modelLoadError.value = ''
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/models')
+    const payload = await response.json()
+
+    if (!response.ok) {
+      throw new Error(`Unable to load model suggestions (${response.status})`)
+    }
+
+    const data: unknown[] = Array.isArray(payload?.data) ? payload.data : []
+    openRouterModels.value = data
+      .filter((entry: unknown): entry is Record<string, unknown> => !!entry && typeof entry === 'object')
+      .map((entry: Record<string, unknown>) => ({
+        id: typeof entry.id === 'string' ? entry.id : '',
+        name: typeof entry.name === 'string' ? entry.name : '',
+      }))
+      .filter((entry: OpenRouterModel) => !!entry.id)
+      .sort((a: OpenRouterModel, b: OpenRouterModel) => a.id.localeCompare(b.id))
+  } catch (error) {
+    modelLoadError.value = error instanceof Error ? error.message : 'Unable to load model suggestions.'
+  } finally {
+    isLoadingModels.value = false
+  }
+}
+
+function applyModelSuggestion(value: string) {
+  model.value = value
+  isModelInputFocused.value = false
+}
+
 function closeSettings() {
   showSettings.value = false
 }
@@ -380,6 +433,8 @@ watch(
 )
 
 onMounted(async () => {
+  await loadOpenRouterModels()
+
   const savedSettings = safeParse<Partial<typeof settings>>(localStorage.getItem('or-playground-settings'), {})
   settings.apiKey = typeof savedSettings.apiKey === 'string' ? savedSettings.apiKey : ''
   settings.temperature = typeof savedSettings.temperature === 'number' ? savedSettings.temperature : 0.7
@@ -437,12 +492,33 @@ onMounted(async () => {
           <div class="mb-4 grid gap-4 sm:grid-cols-2">
             <label class="block">
               <span class="mb-1 block text-sm font-semibold">Model</span>
-              <input
-                v-model="model"
-                type="text"
-                placeholder="openai/gpt-4.1-mini"
-                class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none ring-0 transition focus:border-slate-900"
-              />
+              <div class="relative">
+                <input
+                  v-model="model"
+                  type="text"
+                  placeholder="openai/gpt-4.1-mini"
+                  class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none ring-0 transition focus:border-slate-900"
+                  @focus="isModelInputFocused = true"
+                  @blur="isModelInputFocused = false"
+                />
+                <div
+                  v-if="showModelSuggestions"
+                  class="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg"
+                >
+                  <button
+                    v-for="entry in filteredModelSuggestions"
+                    :key="entry.id"
+                    type="button"
+                    class="block w-full rounded-lg px-3 py-2 text-left text-sm transition hover:bg-slate-100"
+                    @mousedown.prevent="applyModelSuggestion(entry.id)"
+                  >
+                    <div class="font-semibold text-slate-900">{{ entry.id }}</div>
+                    <div v-if="entry.name && entry.name !== entry.id" class="text-xs text-slate-500">{{ entry.name }}</div>
+                  </button>
+                </div>
+              </div>
+              <span v-if="isLoadingModels" class="mt-1 block text-xs text-slate-500">Loading model suggestions...</span>
+              <span v-else-if="modelLoadError" class="mt-1 block text-xs text-rose-600">{{ modelLoadError }}</span>
             </label>
             <div class="flex items-end gap-2">
               <button
