@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 type ReasoningEffort = 'low' | 'medium' | 'high'
 
@@ -36,6 +36,8 @@ const isLoadingModels = ref(false)
 const modelLoadError = ref('')
 const openRouterModels = ref<OpenRouterModel[]>([])
 let presetAutoSyncTimer: ReturnType<typeof setInterval> | null = null
+let presetAutoSaveTimer: ReturnType<typeof setTimeout> | null = null
+const suppressPresetAutoSave = ref(false)
 
 const presetName = ref('')
 const selectedPresetId = ref('')
@@ -384,15 +386,18 @@ async function savePreset() {
   }
 }
 
-function loadSelectedPreset() {
+async function loadSelectedPreset() {
   if (!selectedPreset.value) {
     return
   }
 
+  suppressPresetAutoSave.value = true
   model.value = selectedPreset.value.model
   systemMessage.value = selectedPreset.value.systemMessage
   userMessage.value = selectedPreset.value.userMessage
   presetName.value = selectedPreset.value.name
+  await nextTick()
+  suppressPresetAutoSave.value = false
 }
 
 async function deleteSelectedPreset() {
@@ -498,6 +503,64 @@ function closeSettings() {
   showSettings.value = false
 }
 
+function clearPresetAutoSaveTimer() {
+  if (presetAutoSaveTimer) {
+    clearTimeout(presetAutoSaveTimer)
+    presetAutoSaveTimer = null
+  }
+}
+
+function hasSelectedPresetChanges() {
+  if (!selectedPreset.value) {
+    return false
+  }
+
+  const nextName = presetName.value.trim() || selectedPreset.value.name
+  return (
+    nextName !== selectedPreset.value.name ||
+    model.value !== selectedPreset.value.model ||
+    systemMessage.value !== selectedPreset.value.systemMessage ||
+    userMessage.value !== selectedPreset.value.userMessage
+  )
+}
+
+async function autoSaveSelectedPreset() {
+  if (!presetDirectoryHandle.value || !selectedPreset.value || suppressPresetAutoSave.value) {
+    return
+  }
+
+  if (!hasSelectedPresetChanges()) {
+    return
+  }
+
+  const updatedPreset: PromptPreset = {
+    ...selectedPreset.value,
+    name: presetName.value.trim() || selectedPreset.value.name,
+    model: model.value,
+    systemMessage: systemMessage.value,
+    userMessage: userMessage.value,
+    updatedAt: new Date().toISOString(),
+  }
+
+  try {
+    await writePreset(updatedPreset)
+    await syncPresetsFromDirectory()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'Unable to auto-save preset.'
+  }
+}
+
+function queueSelectedPresetAutoSave() {
+  if (!presetDirectoryHandle.value || !selectedPreset.value || suppressPresetAutoSave.value) {
+    return
+  }
+
+  clearPresetAutoSaveTimer()
+  presetAutoSaveTimer = setTimeout(() => {
+    void autoSaveSelectedPreset()
+  }, 500)
+}
+
 watch(
   () => ({ ...settings }),
   (value) => {
@@ -513,6 +576,17 @@ watch(
   },
   { immediate: true },
 )
+
+watch([model, systemMessage, userMessage, presetName], () => {
+  queueSelectedPresetAutoSave()
+})
+
+watch(selectedPresetId, (id) => {
+  clearPresetAutoSaveTimer()
+  if (id) {
+    void loadSelectedPreset()
+  }
+})
 
 onMounted(async () => {
   await reconnectSavedPresetDirectory()
@@ -534,6 +608,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   setAutoSync(false)
+  clearPresetAutoSaveTimer()
   window.removeEventListener('focus', syncPresetsFromDirectory)
 })
 </script>
@@ -650,14 +725,6 @@ onBeforeUnmount(() => {
               @click="hasConnectedDirectory ? disconnectPresetDirectory() : connectPresetDirectory()"
             >
               {{ hasConnectedDirectory ? 'Disconnect Directory' : 'Connect Directory' }}
-            </button>
-            <button
-              type="button"
-              class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed"
-              :disabled="!presetDirectoryHandle || syncingPresets"
-              @click="syncPresetsFromDirectory"
-            >
-              Sync
             </button>
           </div>
 
