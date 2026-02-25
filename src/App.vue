@@ -22,6 +22,7 @@ const DB_NAME = 'or-playground-db'
 const DB_VERSION = 2
 const STORE_NAME = 'app-kv'
 const DIRECTORY_HANDLE_KEY = 'preset-directory-handle'
+const PRESET_QUERY_KEY = 'preset'
 
 const model = ref('openai/gpt-4.1-mini')
 const systemMessage = ref('You are a helpful assistant.')
@@ -173,6 +174,30 @@ function toTextContent(content: unknown): string {
   return ''
 }
 
+function getPresetIdFromUrl() {
+  if (typeof window === 'undefined') {
+    return ''
+  }
+
+  return new URLSearchParams(window.location.search).get(PRESET_QUERY_KEY)?.trim() ?? ''
+}
+
+function setPresetIdInUrl(presetId: string) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const url = new URL(window.location.href)
+  if (presetId) {
+    url.searchParams.set(PRESET_QUERY_KEY, presetId)
+  } else {
+    url.searchParams.delete(PRESET_QUERY_KEY)
+  }
+
+  const nextPath = `${url.pathname}${url.search}${url.hash}`
+  window.history.replaceState(window.history.state, '', nextPath)
+}
+
 async function ensureDirectoryPermission(handle: FileSystemDirectoryHandle) {
   const descriptor = { mode: 'readwrite' as const }
   const permissionHandle = handle as FileSystemDirectoryHandle & {
@@ -200,6 +225,7 @@ async function syncPresetsFromDirectory() {
 
   try {
     const nextPresets: PromptPreset[] = []
+    const hadSelectedPresetBefore = !!selectedPreset.value
 
     const directoryEntries = (
       presetDirectoryHandle.value as FileSystemDirectoryHandle & {
@@ -241,6 +267,8 @@ async function syncPresetsFromDirectory() {
 
     if (selectedPresetId.value && !nextPresets.some((preset) => preset.id === selectedPresetId.value)) {
       selectedPresetId.value = ''
+    } else if (selectedPresetId.value && !hadSelectedPresetBefore) {
+      await loadSelectedPreset()
     }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Unable to load presets from directory.'
@@ -582,6 +610,7 @@ watch([model, systemMessage, userMessage, presetName], () => {
 })
 
 watch(selectedPresetId, (id) => {
+  setPresetIdInUrl(id)
   clearPresetAutoSaveTimer()
   if (id) {
     void loadSelectedPreset()
@@ -589,6 +618,7 @@ watch(selectedPresetId, (id) => {
 })
 
 onMounted(async () => {
+  selectedPresetId.value = getPresetIdFromUrl()
   await reconnectSavedPresetDirectory()
   void loadOpenRouterModels()
 
