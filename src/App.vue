@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import CodeEditor from './components/CodeEditor.vue'
 
 type ReasoningEffort = 'low' | 'medium' | 'high'
 
@@ -892,20 +893,12 @@ onBeforeUnmount(() => {
 
               <label class="mb-4 block">
                 <span class="mb-1 block text-sm font-semibold">System Message</span>
-                <textarea
-                  v-model="systemMessage"
-                  rows="15"
-                  class="text-sm font-mono w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
-                />
+                <CodeEditor v-model="systemMessage" aria-label="System Message" />
               </label>
 
               <label class="mb-4 block">
                 <span class="mb-1 block text-sm font-semibold">User Message</span>
-                <textarea
-                  v-model="userMessage"
-                  rows="15"
-                  class="text-sm font-mono w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
-                />
+                <CodeEditor v-model="userMessage" aria-label="User Message" />
               </label>
 
               <div v-if="errorMessage" class="mb-4 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
