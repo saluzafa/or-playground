@@ -13,7 +13,7 @@ const props = withDefaults(
   }>(),
   {
     minHeight: "10vh",
-    maxHeight: "20vh",
+    maxHeight: "30vh",
     ariaLabel: 'Editor',
   },
 )
@@ -38,17 +38,19 @@ onMounted(() => {
       EditorView.lineWrapping,
       EditorView.theme({
         '&': {
-          height: '100%',
+          height: 'auto',
         },
         '.cm-content': {
           fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
           fontSize: '0.875rem',
           padding: '0.75rem',
+        },
+        '.cm-content, .cm-gutter': {
           minHeight: props.minHeight,
-          maxHeight: props.maxHeight,
         },
         '.cm-scroller': {
           overflow: 'auto',
+          maxHeight: props.maxHeight,
         },
         '&.cm-focused': {
           outline: 'none',

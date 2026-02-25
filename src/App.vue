@@ -689,6 +689,9 @@ function sendPromptOnShortcut(event: KeyboardEvent) {
   }
 
   event.preventDefault()
+  event.stopPropagation()
+  event.stopImmediatePropagation()
+
   void sendPrompt()
 }
 
