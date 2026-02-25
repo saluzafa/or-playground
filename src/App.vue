@@ -913,12 +913,12 @@ onBeforeUnmount(() => {
 
               <label class="mb-4 block">
                 <span class="mb-1 block text-sm font-semibold">System Message</span>
-                <CodeEditor v-model="systemMessage" aria-label="System Message" />
+                <CodeEditor v-model="systemMessage" aria-label="System Message" @mod-enter="sendPrompt" />
               </label>
 
               <label class="mb-4 block">
                 <span class="mb-1 block text-sm font-semibold">User Message</span>
-                <CodeEditor v-model="userMessage" aria-label="User Message" />
+                <CodeEditor v-model="userMessage" aria-label="User Message" @mod-enter="sendPrompt" />
               </label>
 
               <div v-if="errorMessage" class="mb-4 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">

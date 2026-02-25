@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { EditorState } from '@codemirror/state'
-import { EditorView } from '@codemirror/view'
+import { EditorState, Prec } from '@codemirror/state'
+import { EditorView, keymap } from '@codemirror/view'
 import { basicSetup } from 'codemirror'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
@@ -20,6 +20,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
+  'mod-enter': []
 }>()
 
 const editorRoot = ref<HTMLElement | null>(null)
@@ -34,6 +35,17 @@ onMounted(() => {
   const state = EditorState.create({
     doc: props.modelValue,
     extensions: [
+      Prec.highest(
+        keymap.of([
+          {
+            key: 'Mod-Enter',
+            run: () => {
+              emit('mod-enter')
+              return true
+            },
+          },
+        ]),
+      ),
       basicSetup,
       EditorView.lineWrapping,
       EditorView.theme({
