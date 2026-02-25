@@ -75,9 +75,8 @@ function editorTheme(isDark: boolean) {
             color: '#64748b',
             border: 'none',
           },
-      '.cm-activeLine': isDark ? { backgroundColor: '#1e293b' } : { backgroundColor: '#f1f5f9' },
       '.cm-activeLineGutter': isDark ? { backgroundColor: '#1e293b' } : { backgroundColor: '#f1f5f9' },
-      '.cm-selectionBackground, ::selection': isDark
+      '.cm-selectionBackground, ::selected': isDark
         ? { backgroundColor: '#334155 !important' }
         : { backgroundColor: '#cbd5e1 !important' },
       '.cm-cursor, .cm-dropCursor': isDark ? { borderLeftColor: '#e2e8f0' } : { borderLeftColor: '#0f172a' },

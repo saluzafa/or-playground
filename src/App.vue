@@ -55,6 +55,7 @@ const model = ref('openai/gpt-4.1-mini')
 const systemMessage = ref('You are a helpful assistant.')
 const userMessage = ref('')
 const responseText = ref('')
+const responseReasoning = ref('')
 const responseJson = ref('')
 const responseUsage = ref<OpenRouterUsage | null>(null)
 const errorMessage = ref('')
@@ -697,7 +698,9 @@ async function sendPrompt() {
     }
 
     const content = payload?.choices?.[0]?.message?.content
+    const reasoning = payload?.choices?.[0]?.message?.reasoning
     responseText.value = toTextContent(content) || '[No text content in model response]'
+    responseReasoning.value = toTextContent(reasoning)
     responseJson.value = JSON.stringify(payload, null, 2)
     responseUsage.value = extractUsage(payload, requestDurationSeconds)
   } catch (error) {
@@ -1010,6 +1013,11 @@ onBeforeUnmount(() => {
                 <div>
                   <h2 class="mb-2 text-sm font-semibold">Response (Text)</h2>
                   <pre class="min-h-52 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ responseText }}</pre>
+                </div>
+
+                <div>
+                  <h2 class="mb-2 text-sm font-semibold">Reasoning</h2>
+                  <pre class="min-h-52 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ responseReasoning }}</pre>
                 </div>
 
                 <div>
