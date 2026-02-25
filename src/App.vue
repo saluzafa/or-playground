@@ -7,6 +7,7 @@ interface RequestSettings {
   apiKey: string
   temperature: number
   topP: number
+  reasoningEnabled: boolean
   reasoningEffort: ReasoningEffort
 }
 
@@ -43,6 +44,7 @@ const DEFAULT_SETTINGS: RequestSettings = {
   apiKey: '',
   temperature: 0.7,
   topP: 1,
+  reasoningEnabled: true,
   reasoningEffort: 'medium',
 }
 
@@ -184,6 +186,8 @@ function toRequestSettings(value: unknown): RequestSettings {
     apiKey: typeof source.apiKey === 'string' ? source.apiKey : DEFAULT_SETTINGS.apiKey,
     temperature: typeof source.temperature === 'number' ? source.temperature : DEFAULT_SETTINGS.temperature,
     topP: typeof source.topP === 'number' ? source.topP : DEFAULT_SETTINGS.topP,
+    reasoningEnabled:
+      typeof source.reasoningEnabled === 'boolean' ? source.reasoningEnabled : DEFAULT_SETTINGS.reasoningEnabled,
     reasoningEffort: toReasoningEffort(source.reasoningEffort),
   }
 }
@@ -193,6 +197,7 @@ function snapshotSettings(): RequestSettings {
     apiKey: settings.apiKey,
     temperature: settings.temperature,
     topP: settings.topP,
+    reasoningEnabled: settings.reasoningEnabled,
     reasoningEffort: settings.reasoningEffort,
   }
 }
@@ -201,6 +206,7 @@ function applySettings(nextSettings: RequestSettings) {
   settings.apiKey = nextSettings.apiKey
   settings.temperature = nextSettings.temperature
   settings.topP = nextSettings.topP
+  settings.reasoningEnabled = nextSettings.reasoningEnabled
   settings.reasoningEffort = nextSettings.reasoningEffort
 }
 
@@ -324,6 +330,7 @@ async function syncPresetsFromDirectory() {
                 apiKey: parsed.apiKey,
                 temperature: parsed.temperature,
                 topP: parsed.topP,
+                reasoningEnabled: parsed.reasoningEnabled,
                 reasoningEffort: parsed.reasoningEffort,
               },
         ),
@@ -620,9 +627,13 @@ async function sendPrompt() {
         messages,
         temperature: settings.temperature,
         top_p: settings.topP,
-        reasoning: {
-          effort: settings.reasoningEffort,
-        },
+        ...(settings.reasoningEnabled
+          ? {
+              reasoning: {
+                effort: settings.reasoningEffort,
+              },
+            }
+          : {}),
       }),
     })
 
@@ -699,6 +710,7 @@ function hasSelectedPresetChanges() {
     settings.apiKey !== selectedPreset.value.settings.apiKey ||
     settings.temperature !== selectedPreset.value.settings.temperature ||
     settings.topP !== selectedPreset.value.settings.topP ||
+    settings.reasoningEnabled !== selectedPreset.value.settings.reasoningEnabled ||
     settings.reasoningEffort !== selectedPreset.value.settings.reasoningEffort
   )
 }
@@ -785,17 +797,17 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[radial-gradient(circle_at_top_left,_#e6f4ff_0%,_#f7fbff_38%,_#eef8f1_100%)] p-6 text-slate-900 sm:p-10">
+  <div class="text-slate-900">
     <div class="mx-auto flex w-full max-w-full flex-col gap-6">
-      <header class="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/50 bg-white/70 p-6 shadow-sm backdrop-blur">
+      <header class="flex flex-wrap items-center justify-between gap-4 bg-white/70 p-6">
         <div>
           <h1 class="text-2xl font-black tracking-tight">OpenRouter Playground</h1>
           <p class="text-sm text-slate-600">Experiment with models, prompts, and reusable local presets.</p>
         </div>
       </header>
 
-      <section class="grid gap-6 lg:grid-cols-[1fr_24rem]">
-        <article class="rounded-2xl border border-white/50 bg-white/80 p-5 shadow-sm">
+      <section class="grid lg:grid-cols-[1fr_24rem]">
+        <article class="bg-white/80 p-5">
           <div class="grid grid-cols-12 gap-4">
             <div class="col-span-8">
               <div class="mb-4 grid gap-4 sm:grid-cols-2">
@@ -845,8 +857,7 @@ onBeforeUnmount(() => {
                 <span class="mb-1 block text-sm font-semibold">System Message</span>
                 <textarea
                   v-model="systemMessage"
-                  rows="4"
-                  class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
+                  class="h-[20vh] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
                 />
               </label>
 
@@ -854,46 +865,12 @@ onBeforeUnmount(() => {
                 <span class="mb-1 block text-sm font-semibold">User Message</span>
                 <textarea
                   v-model="userMessage"
-                  rows="7"
-                  class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
+                  class="h-[30vh] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
                 />
               </label>
 
               <div v-if="errorMessage" class="mb-4 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
                 {{ errorMessage }}
-              </div>
-
-              <div>
-                <h2 class="mb-2 text-sm font-semibold">Response Usage</h2>
-                <div
-                  class="overflow-hidden rounded-2xl border border-slate-200 bg-[linear-gradient(145deg,_#ffffff,_#f8fbff)] shadow-sm"
-                >
-                  <div class="border-b border-slate-200/80 bg-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
-                    OpenRouter API Usage
-                  </div>
-                  <div class="grid gap-3 p-3 sm:grid-cols-2">
-                    <div class="rounded-xl border border-sky-100 bg-sky-50/70 p-3">
-                      <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-sky-700">Prompt Tokens</p>
-                      <p class="mt-1 font-mono text-lg font-bold text-sky-950">{{ formatUsageNumber(responseUsage?.promptTokens ?? null) }}</p>
-                    </div>
-                    <div class="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3">
-                      <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-indigo-700">Completion Tokens</p>
-                      <p class="mt-1 font-mono text-lg font-bold text-indigo-950">{{ formatUsageNumber(responseUsage?.completionTokens ?? null) }}</p>
-                    </div>
-                    <div class="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
-                      <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-700">Total Tokens</p>
-                      <p class="mt-1 font-mono text-lg font-bold text-emerald-950">{{ formatUsageNumber(responseUsage?.totalTokens ?? null) }}</p>
-                    </div>
-                    <div class="rounded-xl border border-amber-100 bg-amber-50/70 p-3">
-                      <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-700">Cost</p>
-                      <p class="mt-1 font-mono text-lg font-bold text-amber-950">{{ formatUsageCost(responseUsage?.cost ?? null) }}</p>
-                    </div>
-                  </div>
-                  <div class="border-t border-slate-200/80 bg-slate-50/60 px-4 py-3">
-                    <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-600">prompt_tokens_details.cached_tokens</p>
-                    <p class="mt-1 font-mono text-base font-bold text-slate-900">{{ formatUsageNumber(responseUsage?.cachedTokens ?? null) }}</p>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -901,9 +878,38 @@ onBeforeUnmount(() => {
               <div class="space-y-4">
 
                 <div>
+                  <h2 class="mb-2 text-sm font-semibold">Response Usage</h2>
+                  <div class="">
+                    <div class="grid gap-3 sm:grid-cols-3 text-[11px]">
+                      <div class="rounded-xl border border-sky-100 bg-sky-50/70 py-1 px-2">
+                        <p class="font-semibold uppercase tracking-[0.08em] text-sky-700">Prompt</p>
+                        <p class="m-0 p-0 mt-1 font-mono font-bold text-sky-950">{{ formatUsageNumber(responseUsage?.promptTokens ?? null) }} tokens</p>
+                      </div>
+                      <div class="rounded-xl border border-indigo-100 bg-indigo-50/70 py-1 px-2">
+                        <p class="font-semibold uppercase tracking-[0.08em] text-indigo-700">Completion</p>
+                        <p class="mt-1 font-mono font-bold text-indigo-950">{{ formatUsageNumber(responseUsage?.completionTokens ?? null) }} tokens</p>
+                      </div>
+                      <div class="rounded-xl border border-emerald-100 bg-emerald-50/70 py-1 px-2">
+                        <p class="font-semibold uppercase tracking-[0.08em] text-emerald-700">Total</p>
+                        <p class="mt-1 font-mono font-bold text-emerald-950">{{ formatUsageNumber(responseUsage?.totalTokens ?? null) }} tokens</p>
+                      </div>
+                      <div class="rounded-xl border border-amber-100 bg-amber-50/70 py-1 px-2">
+                        <p class="font-semibold uppercase tracking-[0.08em] text-amber-700">Cost</p>
+                        <p class="mt-1 font-mono font-bold text-amber-950">${{ formatUsageCost(responseUsage?.cost ?? null) }}</p>
+                      </div>
+                      <div class="rounded-xl border border-slate-100 bg-slate-50/70 py-1 px-2">
+                        <p class="font-semibold uppercase tracking-[0.08em] text-slate-700">Cached</p>
+                        <p class="mt-1 font-mono font-bold text-slate-950">{{ formatUsageNumber(responseUsage?.cachedTokens ?? null) }}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
                   <h2 class="mb-2 text-sm font-semibold">Response (Text)</h2>
                   <pre class="min-h-52 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100">{{ responseText }}</pre>
                 </div>
+
                 <div>
                   <h2 class="mb-2 text-sm font-semibold">Response (JSON)</h2>
                   <pre class="min-h-52 overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100">{{ responseJson }}</pre>
@@ -914,7 +920,7 @@ onBeforeUnmount(() => {
 
         </article>
 
-        <aside class="rounded-2xl border border-white/50 bg-white/80 p-5 shadow-sm">
+        <aside class="bg-white/80 p-4">
           <h2 class="mb-2 text-base font-black tracking-tight">Preset Manager</h2>
           <p class="mb-4 text-xs text-slate-600">Presets are saved as JSON files in a synced local directory.</p>
 
@@ -1031,10 +1037,24 @@ onBeforeUnmount(() => {
                 />
               </label>
 
+              <label class="flex items-center justify-between gap-3">
+                <span class="text-xs font-semibold">Reasoning</span>
+                <span class="relative inline-flex cursor-pointer items-center">
+                  <input v-model="settings.reasoningEnabled" type="checkbox" class="peer sr-only" />
+                  <span
+                    class="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-slate-900 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-slate-400"
+                  />
+                  <span
+                    class="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5"
+                  />
+                </span>
+              </label>
+
               <label>
                 <span class="mb-1 block text-xs font-semibold">Reasoning Effort</span>
                 <select
                   v-model="settings.reasoningEffort"
+                  :disabled="!settings.reasoningEnabled"
                   class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
                 >
                   <option value="low">low</option>
