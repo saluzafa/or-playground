@@ -42,6 +42,7 @@ const DB_VERSION = 2
 const STORE_NAME = 'app-kv'
 const DIRECTORY_HANDLE_KEY = 'preset-directory-handle'
 const PRESET_QUERY_KEY = 'preset'
+const THEME_STORAGE_KEY = 'theme-preference'
 const DEFAULT_SETTINGS: RequestSettings = {
   apiKey: '',
   temperature: 0.7,
@@ -57,6 +58,7 @@ const responseText = ref('')
 const responseJson = ref('')
 const responseUsage = ref<OpenRouterUsage | null>(null)
 const errorMessage = ref('')
+const isDarkMode = ref(false)
 const isSending = ref(false)
 const isModelInputFocused = ref(false)
 const isLoadingModels = ref(false)
@@ -264,6 +266,31 @@ function setPresetIdInUrl(presetId: string) {
 
   const nextPath = `${url.pathname}${url.search}${url.hash}`
   window.history.replaceState(window.history.state, '', nextPath)
+}
+
+function applyThemeClass(isDark: boolean) {
+  if (typeof document === 'undefined') {
+    return
+  }
+  document.documentElement.classList.toggle('dark', isDark)
+}
+
+function loadThemePreference() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
+  if (storedTheme === 'dark') {
+    return true
+  }
+  if (storedTheme === 'light') {
+    return false
+  }
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+}
+
+function toggleDarkMode() {
+  isDarkMode.value = !isDarkMode.value
 }
 
 async function ensureDirectoryPermission(handle: FileSystemDirectoryHandle) {
@@ -839,7 +866,17 @@ watch(selectedPresetId, (id) => {
   }
 })
 
+watch(isDarkMode, (isDark) => {
+  applyThemeClass(isDark)
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(THEME_STORAGE_KEY, isDark ? 'dark' : 'light')
+  }
+})
+
 onMounted(async () => {
+  isDarkMode.value = loadThemePreference()
+  applyThemeClass(isDarkMode.value)
+
   selectedPresetId.value = getPresetIdFromUrl()
   await reconnectSavedPresetDirectory()
   void loadOpenRouterModels()
@@ -857,25 +894,34 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="text-slate-900">
+  <div class="min-h-screen bg-slate-100 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100">
     <div class="mx-auto flex w-full max-w-full flex-col gap-6">
-      <header class="flex flex-wrap items-center justify-between gap-4 bg-slate-800 text-white p-6">
+      <header class="flex flex-wrap items-center justify-between gap-4 bg-slate-800 p-6 text-white dark:bg-slate-900">
         <div>
           <h1 class="text-2xl tracking-tight">OpenRouter Playground</h1>
-          <p class="text-sm text-slate-400">Experiment with models, prompts, and reusable local presets.</p>
+          <p class="text-sm text-slate-400 dark:text-slate-300">Experiment with models, prompts, and reusable local presets.</p>
         </div>
-        <button
-          type="button"
-          class="rounded-xl bg-rose-900 px-4 py-2 text-2xl font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-          :disabled="isSending || !canSend"
-          @click="sendPrompt"
-        >
-          {{ isSending ? 'Sending…' : 'Execute Request' }}
-        </button>
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            class="rounded-xl border border-slate-500 bg-slate-700 px-3 py-2 text-sm font-semibold text-slate-100 transition hover:bg-slate-600 dark:border-slate-400 dark:bg-slate-800 dark:hover:bg-slate-700"
+            @click="toggleDarkMode"
+          >
+            {{ isDarkMode ? 'Light Mode' : 'Dark Mode' }}
+          </button>
+          <button
+            type="button"
+            class="rounded-xl bg-rose-900 px-4 py-2 text-2xl font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400 dark:bg-rose-700 dark:hover:bg-rose-600 dark:disabled:bg-slate-600"
+            :disabled="isSending || !canSend"
+            @click="sendPrompt"
+          >
+            {{ isSending ? 'Sending…' : 'Execute Request' }}
+          </button>
+        </div>
       </header>
 
       <section class="grid lg:grid-cols-[1fr_24rem]">
-        <article class="bg-white/80 p-5">
+        <article class="bg-white/80 p-5 dark:bg-slate-900/80">
           <div class="grid grid-cols-12 gap-4">
             <div class="col-span-8">
               <div class="mb-4 grid gap-4 sm:grid-cols-2">
@@ -886,39 +932,39 @@ onBeforeUnmount(() => {
                       v-model="model"
                       type="text"
                       placeholder="openai/gpt-4.1-mini"
-                      class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none ring-0 transition focus:border-slate-900"
+                      class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none ring-0 transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
                       @focus="isModelInputFocused = true"
                       @blur="isModelInputFocused = false"
                     />
                     <div
                       v-if="showModelSuggestions"
-                      class="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg"
+                      class="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
                     >
                       <button
                         v-for="entry in filteredModelSuggestions"
                         :key="entry.id"
                         type="button"
-                        class="block w-full rounded-lg px-3 py-2 text-left text-sm transition hover:bg-slate-100"
+                        class="block w-full rounded-lg px-3 py-2 text-left text-sm transition hover:bg-slate-100 dark:hover:bg-slate-800"
                         @mousedown.prevent="applyModelSuggestion(entry.id)"
                       >
-                        <div class="font-semibold text-slate-900">{{ entry.id }}</div>
-                        <div v-if="entry.name && entry.name !== entry.id" class="text-xs text-slate-500">{{ entry.name }}</div>
+                        <div class="font-semibold text-slate-900 dark:text-slate-100">{{ entry.id }}</div>
+                        <div v-if="entry.name && entry.name !== entry.id" class="text-xs text-slate-500 dark:text-slate-400">{{ entry.name }}</div>
                       </button>
                     </div>
                   </div>
-                  <span v-if="isLoadingModels" class="mt-1 block text-xs text-slate-500">Loading model suggestions...</span>
+                  <span v-if="isLoadingModels" class="mt-1 block text-xs text-slate-500 dark:text-slate-400">Loading model suggestions...</span>
                   <span v-else-if="modelLoadError" class="mt-1 block text-xs text-rose-600">{{ modelLoadError }}</span>
                 </label>
               </div>
 
               <label class="mb-4 block">
                 <span class="mb-1 block text-sm font-semibold">System Message</span>
-                <CodeEditor v-model="systemMessage" aria-label="System Message" @mod-enter="sendPrompt" />
+                <CodeEditor v-model="systemMessage" :dark="isDarkMode" aria-label="System Message" @mod-enter="sendPrompt" />
               </label>
 
               <label class="mb-4 block">
                 <span class="mb-1 block text-sm font-semibold">User Message</span>
-                <CodeEditor v-model="userMessage" aria-label="User Message" @mod-enter="sendPrompt" />
+                <CodeEditor v-model="userMessage" :dark="isDarkMode" aria-label="User Message" @mod-enter="sendPrompt" />
               </label>
 
               <div v-if="errorMessage" class="mb-4 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
@@ -963,12 +1009,12 @@ onBeforeUnmount(() => {
 
                 <div>
                   <h2 class="mb-2 text-sm font-semibold">Response (Text)</h2>
-                  <pre class="min-h-52 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100">{{ responseText }}</pre>
+                  <pre class="min-h-52 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ responseText }}</pre>
                 </div>
 
                 <div>
                   <h2 class="mb-2 text-sm font-semibold">Response (JSON)</h2>
-                  <pre class="min-h-52 overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100">{{ responseJson }}</pre>
+                  <pre class="min-h-52 overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ responseJson }}</pre>
                 </div>
               </div>
             </div>
@@ -976,18 +1022,18 @@ onBeforeUnmount(() => {
 
         </article>
 
-        <aside class="bg-white/80 p-4">
+        <aside class="bg-white/80 p-4 dark:bg-slate-900/80">
           <h2 class="mb-2 text-base font-black tracking-tight">Preset Manager</h2>
-          <p class="mb-4 text-xs text-slate-600">Presets are saved as JSON files in a synced local directory.</p>
+          <p class="mb-4 text-xs text-slate-600 dark:text-slate-400">Presets are saved as JSON files in a synced local directory.</p>
 
-          <div class="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+          <div class="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
             Directory: <strong>{{ directoryLabel }}</strong>
           </div>
 
           <div class="mb-4 flex gap-2">
             <button
               type="button"
-              class="flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed"
+              class="flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
               :disabled="!canUseDirectoryApi"
               @click="hasConnectedDirectory ? disconnectPresetDirectory() : connectPresetDirectory()"
             >
@@ -1001,14 +1047,14 @@ onBeforeUnmount(() => {
               v-model="presetName"
               type="text"
               placeholder="My coding preset"
-              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
               @keydown.enter.prevent="renameSelectedPreset"
             />
           </label>
 
           <button
             type="button"
-            class="mb-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed"
+            class="mb-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
             :disabled="!canRenameSelectedPreset"
             @click="renameSelectedPreset"
           >
@@ -1028,7 +1074,7 @@ onBeforeUnmount(() => {
             <span class="mb-1 block text-xs font-semibold">Saved Presets</span>
             <select
               v-model="selectedPresetId"
-              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
             >
               <option value="">Select a preset</option>
               <option v-for="preset in presets" :key="preset.id" :value="preset.id">
@@ -1040,7 +1086,7 @@ onBeforeUnmount(() => {
           <div class="flex gap-2">
             <button
               type="button"
-              class="flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed"
+              class="flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
               :disabled="!selectedPreset"
               @click="loadSelectedPreset"
             >
@@ -1056,7 +1102,7 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <div class="mt-4 border-t border-slate-200 pt-4">
+          <div class="mt-4 border-t border-slate-200 pt-4 dark:border-slate-700">
             <h3 class="mb-3 text-sm font-semibold">Request Settings</h3>
             <div class="grid gap-3">
               <label>
@@ -1065,7 +1111,7 @@ onBeforeUnmount(() => {
                   v-model="settings.apiKey"
                   type="password"
                   placeholder="sk-or-v1-..."
-                  class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+                  class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
                 />
               </label>
 
@@ -1077,7 +1123,7 @@ onBeforeUnmount(() => {
                   min="0"
                   max="2"
                   step="0.1"
-                  class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+                  class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
                 />
               </label>
 
@@ -1089,7 +1135,7 @@ onBeforeUnmount(() => {
                   min="0"
                   max="1"
                   step="0.05"
-                  class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+                  class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
                 />
               </label>
 
@@ -1098,10 +1144,10 @@ onBeforeUnmount(() => {
                 <span class="relative inline-flex cursor-pointer items-center">
                   <input v-model="settings.reasoningEnabled" type="checkbox" class="peer sr-only" />
                   <span
-                    class="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-slate-900 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-slate-400"
+                    class="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-slate-900 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-slate-400 dark:bg-slate-700 dark:peer-checked:bg-slate-300 dark:peer-focus:ring-slate-500"
                   />
                   <span
-                    class="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5"
+                    class="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5 dark:bg-slate-950"
                   />
                 </span>
               </label>
@@ -1111,7 +1157,7 @@ onBeforeUnmount(() => {
                 <select
                   v-model="settings.reasoningEffort"
                   :disabled="!settings.reasoningEnabled"
-                  class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+                  class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
                 >
                   <option value="low">low</option>
                   <option value="medium">medium</option>
