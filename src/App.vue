@@ -658,6 +658,18 @@ async function sendPrompt() {
   }
 }
 
+function sendPromptOnShortcut(event: KeyboardEvent) {
+  if (event.key !== 'Enter') {
+    return
+  }
+  if (!(event.metaKey || event.ctrlKey)) {
+    return
+  }
+
+  event.preventDefault()
+  void sendPrompt()
+}
+
 async function loadOpenRouterModels() {
   isLoadingModels.value = true
   modelLoadError.value = ''
@@ -804,6 +816,14 @@ onBeforeUnmount(() => {
           <h1 class="text-2xl font-black tracking-tight">OpenRouter Playground</h1>
           <p class="text-sm text-slate-600">Experiment with models, prompts, and reusable local presets.</p>
         </div>
+        <button
+          type="button"
+          class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+          :disabled="isSending || !canSend"
+          @click="sendPrompt"
+        >
+          {{ isSending ? 'Sending…' : 'Send Request' }}
+        </button>
       </header>
 
       <section class="grid lg:grid-cols-[1fr_24rem]">
@@ -841,16 +861,6 @@ onBeforeUnmount(() => {
                   <span v-if="isLoadingModels" class="mt-1 block text-xs text-slate-500">Loading model suggestions...</span>
                   <span v-else-if="modelLoadError" class="mt-1 block text-xs text-rose-600">{{ modelLoadError }}</span>
                 </label>
-                <div class="flex items-end gap-2">
-                  <button
-                    type="button"
-                    class="w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-                    :disabled="isSending || !canSend"
-                    @click="sendPrompt"
-                  >
-                    {{ isSending ? 'Sending…' : 'Send Request' }}
-                  </button>
-                </div>
               </div>
 
               <label class="mb-4 block">
@@ -858,6 +868,7 @@ onBeforeUnmount(() => {
                 <textarea
                   v-model="systemMessage"
                   class="h-[20vh] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
+                  @keydown="sendPromptOnShortcut"
                 />
               </label>
 
@@ -866,6 +877,7 @@ onBeforeUnmount(() => {
                 <textarea
                   v-model="userMessage"
                   class="h-[30vh] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
+                  @keydown="sendPromptOnShortcut"
                 />
               </label>
 
