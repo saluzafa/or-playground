@@ -67,6 +67,14 @@ const canUseDirectoryApi = computed(() => typeof window !== 'undefined' && 'show
 const hasConnectedDirectory = computed(() => !!presetDirectoryHandle.value)
 
 const selectedPreset = computed(() => presets.value.find((preset) => preset.id === selectedPresetId.value) ?? null)
+const canRenameSelectedPreset = computed(() => {
+  if (!presetDirectoryHandle.value || !selectedPreset.value) {
+    return false
+  }
+
+  const nextName = presetName.value.trim()
+  return !!nextName && nextName !== selectedPreset.value.name
+})
 const filteredModelSuggestions = computed(() => {
   const query = model.value.trim().toLowerCase()
   const source = openRouterModels.value
@@ -449,6 +457,30 @@ async function deleteSelectedPreset() {
   }
 }
 
+async function renameSelectedPreset() {
+  if (!presetDirectoryHandle.value || !selectedPreset.value) {
+    return
+  }
+
+  const nextName = presetName.value.trim()
+  if (!nextName || nextName === selectedPreset.value.name) {
+    return
+  }
+
+  const updatedPreset: PromptPreset = {
+    ...selectedPreset.value,
+    name: nextName,
+    updatedAt: new Date().toISOString(),
+  }
+
+  try {
+    await writePreset(updatedPreset)
+    await syncPresetsFromDirectory()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'Unable to rename preset.'
+  }
+}
+
 function toNumberOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
@@ -603,9 +635,7 @@ function hasSelectedPresetChanges() {
     return false
   }
 
-  const nextName = presetName.value.trim() || selectedPreset.value.name
   return (
-    nextName !== selectedPreset.value.name ||
     model.value !== selectedPreset.value.model ||
     systemMessage.value !== selectedPreset.value.systemMessage ||
     userMessage.value !== selectedPreset.value.userMessage
@@ -623,7 +653,7 @@ async function autoSaveSelectedPreset() {
 
   const updatedPreset: PromptPreset = {
     ...selectedPreset.value,
-    name: presetName.value.trim() || selectedPreset.value.name,
+    name: selectedPreset.value.name,
     model: model.value,
     systemMessage: systemMessage.value,
     userMessage: userMessage.value,
@@ -665,7 +695,7 @@ watch(
   { immediate: true },
 )
 
-watch([model, systemMessage, userMessage, presetName], () => {
+watch([model, systemMessage, userMessage], () => {
   queueSelectedPresetAutoSave()
 })
 
@@ -859,8 +889,18 @@ onBeforeUnmount(() => {
               type="text"
               placeholder="My coding preset"
               class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+              @keydown.enter.prevent="renameSelectedPreset"
             />
           </label>
+
+          <button
+            type="button"
+            class="mb-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed"
+            :disabled="!canRenameSelectedPreset"
+            @click="renameSelectedPreset"
+          >
+            Rename Selected Preset
+          </button>
 
           <button
             type="button"
