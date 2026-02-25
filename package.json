@@ -11,6 +11,8 @@
     "type-check": "vue-tsc --build"
   },
   "dependencies": {
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/language-data": "^6.5.2",
     "@codemirror/state": "^6.5.2",
     "@codemirror/view": "^6.38.6",
     "@tailwindcss/vite": "^4.2.1",

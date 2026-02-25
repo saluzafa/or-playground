@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { Compartment, EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import { markdown } from '@codemirror/lang-markdown'
+import { tags as t } from '@lezer/highlight'
 import { basicSetup } from 'codemirror'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
@@ -29,6 +32,7 @@ const editorRoot = ref<HTMLElement | null>(null)
 let editorView: EditorView | null = null
 let syncingFromParent = false
 const themeCompartment = new Compartment()
+const markdownHighlightCompartment = new Compartment()
 
 function editorTheme(isDark: boolean) {
   return EditorView.theme(
@@ -82,6 +86,21 @@ function editorTheme(isDark: boolean) {
   )
 }
 
+function markdownHighlightTheme(isDark: boolean) {
+  return syntaxHighlighting(
+    HighlightStyle.define([
+      { tag: t.heading, fontWeight: '700', color: isDark ? '#93c5fd' : '#1d4ed8' },
+      { tag: t.strong, fontWeight: '700', color: isDark ? '#f8fafc' : '#0f172a' },
+      { tag: t.emphasis, fontStyle: 'italic', color: isDark ? '#e2e8f0' : '#334155' },
+      { tag: t.strikethrough, textDecoration: 'line-through' },
+      { tag: [t.link, t.url], textDecoration: 'underline', color: isDark ? '#7dd3fc' : '#0369a1' },
+      { tag: t.quote, color: isDark ? '#a5b4fc' : '#4338ca' },
+      { tag: t.monospace, color: isDark ? '#fdba74' : '#b45309' },
+      { tag: t.list, color: isDark ? '#cbd5e1' : '#475569' },
+    ]),
+  )
+}
+
 onMounted(() => {
   if (!editorRoot.value) {
     return
@@ -102,8 +121,10 @@ onMounted(() => {
         ]),
       ),
       basicSetup,
+      markdown(),
       EditorView.lineWrapping,
       themeCompartment.of(editorTheme(props.dark)),
+      markdownHighlightCompartment.of(markdownHighlightTheme(props.dark)),
       EditorView.contentAttributes.of({
         'aria-label': props.ariaLabel,
       }),
@@ -148,7 +169,10 @@ watch(
       return
     }
     editorView.dispatch({
-      effects: themeCompartment.reconfigure(editorTheme(isDark)),
+      effects: [
+        themeCompartment.reconfigure(editorTheme(isDark)),
+        markdownHighlightCompartment.reconfigure(markdownHighlightTheme(isDark)),
+      ],
     })
   },
 )

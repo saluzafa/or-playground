@@ -894,9 +894,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-100 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100">
-    <div class="mx-auto flex w-full max-w-full flex-col gap-6">
-      <header class="flex flex-wrap items-center justify-between gap-4 bg-slate-800 p-6 text-white dark:bg-slate-900">
+  <div class="min-h-screen text-slate-900 transition-colors dark:text-slate-100 bg-white/80 dark:bg-slate-800">
+    <div class="mx-auto flex w-full max-w-full flex-col">
+      <header class="flex flex-wrap items-center justify-between gap-4 bg-slate-800 p-6 text-white dark:bg-slate-950">
         <div>
           <h1 class="text-2xl tracking-tight">OpenRouter Playground</h1>
           <p class="text-sm text-slate-400 dark:text-slate-300">Experiment with models, prompts, and reusable local presets.</p>
@@ -920,8 +920,8 @@ onBeforeUnmount(() => {
         </div>
       </header>
 
-      <section class="grid lg:grid-cols-[1fr_24rem]">
-        <article class="bg-white/80 p-5 dark:bg-slate-900/80">
+      <section class="grid lg:grid-cols-[1fr_24rem] ">
+        <article class="p-5">
           <div class="grid grid-cols-12 gap-4">
             <div class="col-span-8">
               <div class="mb-4 grid gap-4 sm:grid-cols-2">
@@ -1022,7 +1022,7 @@ onBeforeUnmount(() => {
 
         </article>
 
-        <aside class="bg-white/80 p-4 dark:bg-slate-900/80">
+        <aside class="p-4">
           <h2 class="mb-2 text-base font-black tracking-tight">Preset Manager</h2>
           <p class="mb-4 text-xs text-slate-600 dark:text-slate-400">Presets are saved as JSON files in a synced local directory.</p>
 

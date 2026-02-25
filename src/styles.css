@@ -9,7 +9,6 @@ body {
   margin: 0;
   font-family: var(--app-font);
   color: #0f172a;
-  background: #f1f5f9;
   transition: background-color 150ms ease, color 150ms ease;
 }
 
