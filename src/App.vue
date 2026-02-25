@@ -3,12 +3,20 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 
 type ReasoningEffort = 'low' | 'medium' | 'high'
 
+interface RequestSettings {
+  apiKey: string
+  temperature: number
+  topP: number
+  reasoningEffort: ReasoningEffort
+}
+
 interface PromptPreset {
   id: string
   name: string
   model: string
   systemMessage: string
   userMessage: string
+  settings: RequestSettings
   updatedAt: string
   filename: string
 }
@@ -31,6 +39,12 @@ const DB_VERSION = 2
 const STORE_NAME = 'app-kv'
 const DIRECTORY_HANDLE_KEY = 'preset-directory-handle'
 const PRESET_QUERY_KEY = 'preset'
+const DEFAULT_SETTINGS: RequestSettings = {
+  apiKey: '',
+  temperature: 0.7,
+  topP: 1,
+  reasoningEffort: 'medium',
+}
 
 const model = ref('openai/gpt-4.1-mini')
 const systemMessage = ref('You are a helpful assistant.')
@@ -54,11 +68,8 @@ const presets = ref<PromptPreset[]>([])
 const syncingPresets = ref(false)
 const directoryLabel = ref('No directory connected')
 
-const settings = reactive({
-  apiKey: '',
-  temperature: 0.7,
-  topP: 1,
-  reasoningEffort: 'medium' as ReasoningEffort,
+const settings = reactive<RequestSettings>({
+  ...DEFAULT_SETTINGS,
 })
 
 const presetDirectoryHandle = ref<FileSystemDirectoryHandle | null>(null)
@@ -158,6 +169,39 @@ function safeParse<T>(value: string | null, fallback: T): T {
   } catch {
     return fallback
   }
+}
+
+function toReasoningEffort(value: unknown, fallback: ReasoningEffort = DEFAULT_SETTINGS.reasoningEffort): ReasoningEffort {
+  if (value === 'low' || value === 'medium' || value === 'high') {
+    return value
+  }
+  return fallback
+}
+
+function toRequestSettings(value: unknown): RequestSettings {
+  const source = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  return {
+    apiKey: typeof source.apiKey === 'string' ? source.apiKey : DEFAULT_SETTINGS.apiKey,
+    temperature: typeof source.temperature === 'number' ? source.temperature : DEFAULT_SETTINGS.temperature,
+    topP: typeof source.topP === 'number' ? source.topP : DEFAULT_SETTINGS.topP,
+    reasoningEffort: toReasoningEffort(source.reasoningEffort),
+  }
+}
+
+function snapshotSettings(): RequestSettings {
+  return {
+    apiKey: settings.apiKey,
+    temperature: settings.temperature,
+    topP: settings.topP,
+    reasoningEffort: settings.reasoningEffort,
+  }
+}
+
+function applySettings(nextSettings: RequestSettings) {
+  settings.apiKey = nextSettings.apiKey
+  settings.temperature = nextSettings.temperature
+  settings.topP = nextSettings.topP
+  settings.reasoningEffort = nextSettings.reasoningEffort
 }
 
 function cleanFilename(value: string) {
@@ -273,6 +317,16 @@ async function syncPresetsFromDirectory() {
         model: typeof parsed.model === 'string' ? parsed.model : '',
         systemMessage: typeof parsed.systemMessage === 'string' ? parsed.systemMessage : '',
         userMessage: typeof parsed.userMessage === 'string' ? parsed.userMessage : '',
+        settings: toRequestSettings(
+          parsed.settings && typeof parsed.settings === 'object'
+            ? parsed.settings
+            : {
+                apiKey: parsed.apiKey,
+                temperature: parsed.temperature,
+                topP: parsed.topP,
+                reasoningEffort: parsed.reasoningEffort,
+              },
+        ),
         updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
         filename,
       })
@@ -389,6 +443,7 @@ async function writePreset(preset: PromptPreset) {
         model: preset.model,
         systemMessage: preset.systemMessage,
         userMessage: preset.userMessage,
+        settings: preset.settings,
         updatedAt: preset.updatedAt,
       },
       null,
@@ -416,6 +471,7 @@ async function savePreset() {
     model: model.value,
     systemMessage: systemMessage.value,
     userMessage: userMessage.value,
+    settings: snapshotSettings(),
     updatedAt: now,
   }
 
@@ -438,6 +494,7 @@ async function loadSelectedPreset() {
   model.value = selectedPreset.value.model
   systemMessage.value = selectedPreset.value.systemMessage
   userMessage.value = selectedPreset.value.userMessage
+  applySettings(selectedPreset.value.settings)
   presetName.value = selectedPreset.value.name
   await nextTick()
   suppressPresetAutoSave.value = false
@@ -638,7 +695,11 @@ function hasSelectedPresetChanges() {
   return (
     model.value !== selectedPreset.value.model ||
     systemMessage.value !== selectedPreset.value.systemMessage ||
-    userMessage.value !== selectedPreset.value.userMessage
+    userMessage.value !== selectedPreset.value.userMessage ||
+    settings.apiKey !== selectedPreset.value.settings.apiKey ||
+    settings.temperature !== selectedPreset.value.settings.temperature ||
+    settings.topP !== selectedPreset.value.settings.topP ||
+    settings.reasoningEffort !== selectedPreset.value.settings.reasoningEffort
   )
 }
 
@@ -657,6 +718,7 @@ async function autoSaveSelectedPreset() {
     model: model.value,
     systemMessage: systemMessage.value,
     userMessage: userMessage.value,
+    settings: snapshotSettings(),
     updatedAt: new Date().toISOString(),
   }
 
@@ -680,14 +742,6 @@ function queueSelectedPresetAutoSave() {
 }
 
 watch(
-  () => ({ ...settings }),
-  (value) => {
-    localStorage.setItem('or-playground-settings', JSON.stringify(value))
-  },
-  { deep: true },
-)
-
-watch(
   presetDirectoryHandle,
   (handle) => {
     setAutoSync(!!handle)
@@ -698,6 +752,14 @@ watch(
 watch([model, systemMessage, userMessage], () => {
   queueSelectedPresetAutoSave()
 })
+
+watch(
+  () => ({ ...settings }),
+  () => {
+    queueSelectedPresetAutoSave()
+  },
+  { deep: true },
+)
 
 watch(selectedPresetId, (id) => {
   setPresetIdInUrl(id)
@@ -711,17 +773,6 @@ onMounted(async () => {
   selectedPresetId.value = getPresetIdFromUrl()
   await reconnectSavedPresetDirectory()
   void loadOpenRouterModels()
-
-  const savedSettings = safeParse<Partial<typeof settings>>(localStorage.getItem('or-playground-settings'), {})
-  settings.apiKey = typeof savedSettings.apiKey === 'string' ? savedSettings.apiKey : ''
-  settings.temperature = typeof savedSettings.temperature === 'number' ? savedSettings.temperature : 0.7
-  settings.topP = typeof savedSettings.topP === 'number' ? savedSettings.topP : 1
-  settings.reasoningEffort =
-    savedSettings.reasoningEffort === 'low' ||
-    savedSettings.reasoningEffort === 'medium' ||
-    savedSettings.reasoningEffort === 'high'
-      ? savedSettings.reasoningEffort
-      : 'medium'
 
   window.addEventListener('focus', syncPresetsFromDirectory)
 })
