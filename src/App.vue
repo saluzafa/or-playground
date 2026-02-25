@@ -40,7 +40,6 @@ const responseJson = ref('')
 const responseUsage = ref<OpenRouterUsage | null>(null)
 const errorMessage = ref('')
 const isSending = ref(false)
-const showSettings = ref(false)
 const isModelInputFocused = ref(false)
 const isLoadingModels = ref(false)
 const modelLoadError = ref('')
@@ -592,10 +591,6 @@ function applyModelSuggestion(value: string) {
   isModelInputFocused.value = false
 }
 
-function closeSettings() {
-  showSettings.value = false
-}
-
 function clearPresetAutoSaveTimer() {
   if (presetAutoSaveTimer) {
     clearTimeout(presetAutoSaveTimer)
@@ -716,13 +711,6 @@ onBeforeUnmount(() => {
           <h1 class="text-2xl font-black tracking-tight">OpenRouter Playground</h1>
           <p class="text-sm text-slate-600">Experiment with models, prompts, and reusable local presets.</p>
         </div>
-        <button
-          type="button"
-          class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold transition hover:border-slate-400"
-          @click="showSettings = true"
-        >
-          Settings
-        </button>
       </header>
 
       <section class="grid gap-6 lg:grid-cols-[1fr_24rem]">
@@ -915,70 +903,62 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
+          <div class="mt-4 border-t border-slate-200 pt-4">
+            <h3 class="mb-3 text-sm font-semibold">Request Settings</h3>
+            <div class="grid gap-3">
+              <label>
+                <span class="mb-1 block text-xs font-semibold">API Key</span>
+                <input
+                  v-model="settings.apiKey"
+                  type="password"
+                  placeholder="sk-or-v1-..."
+                  class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+                />
+              </label>
+
+              <label>
+                <span class="mb-1 block text-xs font-semibold">Temperature (0-2)</span>
+                <input
+                  v-model.number="settings.temperature"
+                  type="number"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+                />
+              </label>
+
+              <label>
+                <span class="mb-1 block text-xs font-semibold">Top P (0-1)</span>
+                <input
+                  v-model.number="settings.topP"
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+                />
+              </label>
+
+              <label>
+                <span class="mb-1 block text-xs font-semibold">Reasoning Effort</span>
+                <select
+                  v-model="settings.reasoningEffort"
+                  class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+                >
+                  <option value="low">low</option>
+                  <option value="medium">medium</option>
+                  <option value="high">high</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
           <p v-if="!canUseDirectoryApi" class="mt-3 text-xs text-amber-700">
             Your browser does not support the File System Access API for directory sync.
           </p>
         </aside>
       </section>
-    </div>
-
-    <div v-if="showSettings" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
-      <div class="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-        <div class="mb-4 flex items-center justify-between">
-          <h2 class="text-lg font-black tracking-tight">Request Settings</h2>
-          <button type="button" class="rounded-lg px-2 py-1 text-sm text-slate-600 hover:bg-slate-100" @click="closeSettings">
-            Close
-          </button>
-        </div>
-
-        <div class="grid gap-4">
-          <label>
-            <span class="mb-1 block text-sm font-semibold">API Key</span>
-            <input
-              v-model="settings.apiKey"
-              type="password"
-              placeholder="sk-or-v1-..."
-              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
-            />
-          </label>
-
-          <label>
-            <span class="mb-1 block text-sm font-semibold">Temperature (0-2)</span>
-            <input
-              v-model.number="settings.temperature"
-              type="number"
-              min="0"
-              max="2"
-              step="0.1"
-              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
-            />
-          </label>
-
-          <label>
-            <span class="mb-1 block text-sm font-semibold">Top P (0-1)</span>
-            <input
-              v-model.number="settings.topP"
-              type="number"
-              min="0"
-              max="1"
-              step="0.05"
-              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
-            />
-          </label>
-
-          <label>
-            <span class="mb-1 block text-sm font-semibold">Reasoning Effort</span>
-            <select
-              v-model="settings.reasoningEffort"
-              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
-            >
-              <option value="low">low</option>
-              <option value="medium">medium</option>
-              <option value="high">high</option>
-            </select>
-          </label>
-        </div>
-      </div>
     </div>
   </div>
 </template>
