@@ -486,6 +486,26 @@ function extractUsage(payload: unknown): OpenRouterUsage | null {
   }
 }
 
+function formatUsageNumber(value: number | null): string {
+  if (value === null) {
+    return 'N/A'
+  }
+  return value.toLocaleString()
+}
+
+function formatUsageCost(value: number | string | null): string {
+  if (value === null) {
+    return 'N/A'
+  }
+  if (typeof value === 'number') {
+    return value.toLocaleString(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 6,
+    })
+  }
+  return value
+}
+
 async function sendPrompt() {
   if (!canSend.value) {
     return
@@ -691,7 +711,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="min-h-screen bg-[radial-gradient(circle_at_top_left,_#e6f4ff_0%,_#f7fbff_38%,_#eef8f1_100%)] p-6 text-slate-900 sm:p-10">
-    <div class="mx-auto flex w-full max-w-6xl flex-col gap-6">
+    <div class="mx-auto flex w-full max-w-full flex-col gap-6">
       <header class="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/50 bg-white/70 p-6 shadow-sm backdrop-blur">
         <div>
           <h1 class="text-2xl font-black tracking-tight">OpenRouter Playground</h1>
@@ -708,91 +728,122 @@ onBeforeUnmount(() => {
 
       <section class="grid gap-6 lg:grid-cols-[1fr_24rem]">
         <article class="rounded-2xl border border-white/50 bg-white/80 p-5 shadow-sm">
-          <div class="mb-4 grid gap-4 sm:grid-cols-2">
-            <label class="block">
-              <span class="mb-1 block text-sm font-semibold">Model</span>
-              <div class="relative">
-                <input
-                  v-model="model"
-                  type="text"
-                  placeholder="openai/gpt-4.1-mini"
-                  class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none ring-0 transition focus:border-slate-900"
-                  @focus="isModelInputFocused = true"
-                  @blur="isModelInputFocused = false"
-                />
-                <div
-                  v-if="showModelSuggestions"
-                  class="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg"
-                >
+          <div class="grid grid-cols-12 gap-4">
+            <div class="col-span-8">
+              <div class="mb-4 grid gap-4 sm:grid-cols-2">
+                <label class="block">
+                  <span class="mb-1 block text-sm font-semibold">Model</span>
+                  <div class="relative">
+                    <input
+                      v-model="model"
+                      type="text"
+                      placeholder="openai/gpt-4.1-mini"
+                      class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none ring-0 transition focus:border-slate-900"
+                      @focus="isModelInputFocused = true"
+                      @blur="isModelInputFocused = false"
+                    />
+                    <div
+                      v-if="showModelSuggestions"
+                      class="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg"
+                    >
+                      <button
+                        v-for="entry in filteredModelSuggestions"
+                        :key="entry.id"
+                        type="button"
+                        class="block w-full rounded-lg px-3 py-2 text-left text-sm transition hover:bg-slate-100"
+                        @mousedown.prevent="applyModelSuggestion(entry.id)"
+                      >
+                        <div class="font-semibold text-slate-900">{{ entry.id }}</div>
+                        <div v-if="entry.name && entry.name !== entry.id" class="text-xs text-slate-500">{{ entry.name }}</div>
+                      </button>
+                    </div>
+                  </div>
+                  <span v-if="isLoadingModels" class="mt-1 block text-xs text-slate-500">Loading model suggestions...</span>
+                  <span v-else-if="modelLoadError" class="mt-1 block text-xs text-rose-600">{{ modelLoadError }}</span>
+                </label>
+                <div class="flex items-end gap-2">
                   <button
-                    v-for="entry in filteredModelSuggestions"
-                    :key="entry.id"
                     type="button"
-                    class="block w-full rounded-lg px-3 py-2 text-left text-sm transition hover:bg-slate-100"
-                    @mousedown.prevent="applyModelSuggestion(entry.id)"
+                    class="w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                    :disabled="isSending || !canSend"
+                    @click="sendPrompt"
                   >
-                    <div class="font-semibold text-slate-900">{{ entry.id }}</div>
-                    <div v-if="entry.name && entry.name !== entry.id" class="text-xs text-slate-500">{{ entry.name }}</div>
+                    {{ isSending ? 'Sending…' : 'Send Request' }}
                   </button>
                 </div>
               </div>
-              <span v-if="isLoadingModels" class="mt-1 block text-xs text-slate-500">Loading model suggestions...</span>
-              <span v-else-if="modelLoadError" class="mt-1 block text-xs text-rose-600">{{ modelLoadError }}</span>
-            </label>
-            <div class="flex items-end gap-2">
-              <button
-                type="button"
-                class="w-full rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-                :disabled="isSending || !canSend"
-                @click="sendPrompt"
-              >
-                {{ isSending ? 'Sending…' : 'Send Request' }}
-              </button>
-            </div>
-          </div>
 
-          <label class="mb-4 block">
-            <span class="mb-1 block text-sm font-semibold">System Message</span>
-            <textarea
-              v-model="systemMessage"
-              rows="4"
-              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
-            />
-          </label>
+              <label class="mb-4 block">
+                <span class="mb-1 block text-sm font-semibold">System Message</span>
+                <textarea
+                  v-model="systemMessage"
+                  rows="4"
+                  class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
+                />
+              </label>
 
-          <label class="mb-4 block">
-            <span class="mb-1 block text-sm font-semibold">User Message</span>
-            <textarea
-              v-model="userMessage"
-              rows="7"
-              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
-            />
-          </label>
+              <label class="mb-4 block">
+                <span class="mb-1 block text-sm font-semibold">User Message</span>
+                <textarea
+                  v-model="userMessage"
+                  rows="7"
+                  class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none transition focus:border-slate-900"
+                />
+              </label>
 
-          <div v-if="errorMessage" class="mb-4 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
-            {{ errorMessage }}
-          </div>
+              <div v-if="errorMessage" class="mb-4 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
+                {{ errorMessage }}
+              </div>
 
-          <div class="space-y-4">
-            <div>
-              <h2 class="mb-2 text-sm font-semibold">Response Usage</h2>
-              <div class="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-800">
-                <div>prompt_tokens: {{ responseUsage?.promptTokens ?? 'N/A' }}</div>
-                <div>completion_tokens: {{ responseUsage?.completionTokens ?? 'N/A' }}</div>
-                <div>total_tokens: {{ responseUsage?.totalTokens ?? 'N/A' }}</div>
-                <div>cost: {{ responseUsage?.cost ?? 'N/A' }}</div>
-                <div>prompt_tokens_details.cached_tokens: {{ responseUsage?.cachedTokens ?? 'N/A' }}</div>
+              <div>
+                <h2 class="mb-2 text-sm font-semibold">Response Usage</h2>
+                <div
+                  class="overflow-hidden rounded-2xl border border-slate-200 bg-[linear-gradient(145deg,_#ffffff,_#f8fbff)] shadow-sm"
+                >
+                  <div class="border-b border-slate-200/80 bg-white/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                    OpenRouter API Usage
+                  </div>
+                  <div class="grid gap-3 p-3 sm:grid-cols-2">
+                    <div class="rounded-xl border border-sky-100 bg-sky-50/70 p-3">
+                      <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-sky-700">Prompt Tokens</p>
+                      <p class="mt-1 font-mono text-lg font-bold text-sky-950">{{ formatUsageNumber(responseUsage?.promptTokens ?? null) }}</p>
+                    </div>
+                    <div class="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3">
+                      <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-indigo-700">Completion Tokens</p>
+                      <p class="mt-1 font-mono text-lg font-bold text-indigo-950">{{ formatUsageNumber(responseUsage?.completionTokens ?? null) }}</p>
+                    </div>
+                    <div class="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3">
+                      <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-700">Total Tokens</p>
+                      <p class="mt-1 font-mono text-lg font-bold text-emerald-950">{{ formatUsageNumber(responseUsage?.totalTokens ?? null) }}</p>
+                    </div>
+                    <div class="rounded-xl border border-amber-100 bg-amber-50/70 p-3">
+                      <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-700">Cost</p>
+                      <p class="mt-1 font-mono text-lg font-bold text-amber-950">{{ formatUsageCost(responseUsage?.cost ?? null) }}</p>
+                    </div>
+                  </div>
+                  <div class="border-t border-slate-200/80 bg-slate-50/60 px-4 py-3">
+                    <p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-600">prompt_tokens_details.cached_tokens</p>
+                    <p class="mt-1 font-mono text-base font-bold text-slate-900">{{ formatUsageNumber(responseUsage?.cachedTokens ?? null) }}</p>
+                  </div>
+                </div>
               </div>
             </div>
-            <div>
-              <h2 class="mb-2 text-sm font-semibold">Response (Text)</h2>
-              <pre class="min-h-52 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100">{{ responseText }}</pre>
-            </div>
-            <div>
-              <h2 class="mb-2 text-sm font-semibold">Response (JSON)</h2>
-              <pre class="min-h-52 overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100">{{ responseJson }}</pre>
+
+            <div class="col-span-4">
+              <div class="space-y-4">
+
+                <div>
+                  <h2 class="mb-2 text-sm font-semibold">Response (Text)</h2>
+                  <pre class="min-h-52 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100">{{ responseText }}</pre>
+                </div>
+                <div>
+                  <h2 class="mb-2 text-sm font-semibold">Response (JSON)</h2>
+                  <pre class="min-h-52 overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100">{{ responseJson }}</pre>
+                </div>
+              </div>
             </div>
           </div>
+
         </article>
 
         <aside class="rounded-2xl border border-white/50 bg-white/80 p-5 shadow-sm">
