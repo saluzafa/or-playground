@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 type ReasoningEffort = 'low' | 'medium' | 'high'
 
@@ -19,7 +19,7 @@ interface OpenRouterModel {
 }
 
 const DB_NAME = 'or-playground-db'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const STORE_NAME = 'app-kv'
 const DIRECTORY_HANDLE_KEY = 'preset-directory-handle'
 
@@ -35,6 +35,7 @@ const isModelInputFocused = ref(false)
 const isLoadingModels = ref(false)
 const modelLoadError = ref('')
 const openRouterModels = ref<OpenRouterModel[]>([])
+let presetAutoSyncTimer: ReturnType<typeof setInterval> | null = null
 
 const presetName = ref('')
 const selectedPresetId = ref('')
@@ -68,9 +69,9 @@ const showModelSuggestions = computed(() => isModelInputFocused.value && filtere
 
 const canSend = computed(() => !!settings.apiKey.trim() && !!model.value.trim() && !!userMessage.value.trim())
 
-async function openDb() {
+async function openDbWithVersion(version?: number) {
   return await new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION)
+    const request = typeof version === 'number' ? indexedDB.open(DB_NAME, version) : indexedDB.open(DB_NAME)
     request.onupgradeneeded = () => {
       const db = request.result
       if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -82,13 +83,25 @@ async function openDb() {
   })
 }
 
+async function openDb() {
+  let db = await openDbWithVersion(DB_VERSION)
+  if (db.objectStoreNames.contains(STORE_NAME)) {
+    return db
+  }
+
+  const nextVersion = Math.max(db.version + 1, DB_VERSION + 1)
+  db.close()
+  db = await openDbWithVersion(nextVersion)
+  return db
+}
+
 async function idbSet(key: string, value: unknown) {
   const db = await openDb()
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
     tx.objectStore(STORE_NAME).put(value, key)
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => reject(tx.error)
+    tx.oncomplete = () => { console.log("DIR_HANDLE OK"); resolve(); }
+    tx.onerror = () => { console.log(tx.error); reject(tx.error) }
   })
   db.close()
 }
@@ -219,6 +232,46 @@ async function syncPresetsFromDirectory() {
     errorMessage.value = error instanceof Error ? error.message : 'Unable to load presets from directory.'
   } finally {
     syncingPresets.value = false
+  }
+}
+
+function setAutoSync(enabled: boolean) {
+  if (!enabled) {
+    if (presetAutoSyncTimer) {
+      clearInterval(presetAutoSyncTimer)
+      presetAutoSyncTimer = null
+    }
+    return
+  }
+
+  if (!presetAutoSyncTimer) {
+    presetAutoSyncTimer = setInterval(() => {
+      void syncPresetsFromDirectory()
+    }, 15000)
+  }
+}
+
+async function reconnectSavedPresetDirectory() {
+  if (!canUseDirectoryApi.value) {
+    return
+  }
+
+  try {
+    const handle = await idbGet<FileSystemDirectoryHandle>(DIRECTORY_HANDLE_KEY)
+    if (!handle) {
+      return
+    }
+
+    const granted = await ensureDirectoryPermission(handle)
+    if (!granted) {
+      return
+    }
+
+    presetDirectoryHandle.value = handle
+    directoryLabel.value = handle.name
+    await syncPresetsFromDirectory()
+  } catch {
+    // Ignore persisted-handle restore errors.
   }
 }
 
@@ -432,8 +485,17 @@ watch(
   { deep: true },
 )
 
+watch(
+  presetDirectoryHandle,
+  (handle) => {
+    setAutoSync(!!handle)
+  },
+  { immediate: true },
+)
+
 onMounted(async () => {
-  await loadOpenRouterModels()
+  await reconnectSavedPresetDirectory()
+  void loadOpenRouterModels()
 
   const savedSettings = safeParse<Partial<typeof settings>>(localStorage.getItem('or-playground-settings'), {})
   settings.apiKey = typeof savedSettings.apiKey === 'string' ? savedSettings.apiKey : ''
@@ -446,27 +508,12 @@ onMounted(async () => {
       ? savedSettings.reasoningEffort
       : 'medium'
 
-  if (!canUseDirectoryApi.value) {
-    return
-  }
+  window.addEventListener('focus', syncPresetsFromDirectory)
+})
 
-  try {
-    const handle = await idbGet<FileSystemDirectoryHandle>(DIRECTORY_HANDLE_KEY)
-    if (!handle) {
-      return
-    }
-
-    const granted = await ensureDirectoryPermission(handle)
-    if (!granted) {
-      return
-    }
-
-    presetDirectoryHandle.value = handle
-    directoryLabel.value = handle.name
-    await syncPresetsFromDirectory()
-  } catch {
-    // Ignore persisted-handle restore errors.
-  }
+onBeforeUnmount(() => {
+  setAutoSync(false)
+  window.removeEventListener('focus', syncPresetsFromDirectory)
 })
 </script>
 
