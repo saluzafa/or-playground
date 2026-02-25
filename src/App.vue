@@ -727,7 +727,7 @@ onBeforeUnmount(() => {
             {{ errorMessage }}
           </div>
 
-          <div class="grid gap-4 xl:grid-cols-2">
+          <div class="space-y-4">
             <div>
               <h2 class="mb-2 text-sm font-semibold">Response (Text)</h2>
               <pre class="min-h-52 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100">{{ responseText }}</pre>
