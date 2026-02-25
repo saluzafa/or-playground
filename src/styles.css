@@ -1,1 +1,15 @@
 @import "tailwindcss";
+
+:root {
+  --app-font: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+body {
+  margin: 0;
+  font-family: var(--app-font);
+  color: #0f172a;
+}
+
+* {
+  box-sizing: border-box;
+}
