@@ -399,9 +399,8 @@ async function savePreset() {
 
   const name = presetName.value.trim() || selectedPreset.value?.name || 'Untitled preset'
   const now = new Date().toISOString()
-  const existing = selectedPreset.value
-  const id = existing?.id ?? (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`)
-  const filename = existing?.filename ?? `${id}-${cleanFilename(name)}.json`
+  const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`
+  const filename = `${id}-${cleanFilename(name)}.json`
 
   const preset: PromptPreset = {
     id,
