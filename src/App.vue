@@ -1466,21 +1466,20 @@ onBeforeUnmount(() => {
                   <span v-if="isLoadingModels" class="mt-1 block text-xs text-slate-500 dark:text-slate-400">Loading model suggestions...</span>
                   <span v-else-if="modelLoadError" class="mt-1 block text-xs text-rose-600">{{ modelLoadError }}</span>
                 </label>
-                <div class="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
-                  <label class="flex items-center justify-between gap-3">
+                <div class="block">
+                  <label class="flex items-center justify-between gap-3 mb-1">
                     <span class="text-sm font-semibold">Compare Mode</span>
                     <span class="relative inline-flex cursor-pointer items-center">
                       <input v-model="compareMode" type="checkbox" class="peer sr-only" />
                       <span
-                        class="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-slate-900 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-slate-400 dark:bg-slate-700 dark:peer-checked:bg-slate-300 dark:peer-focus:ring-slate-500"
+                        class="h-4 w-9 rounded-full bg-slate-300 transition peer-checked:bg-slate-900 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-slate-400 dark:bg-slate-700 dark:peer-checked:bg-slate-300 dark:peer-focus:ring-slate-500"
                       />
                       <span
-                        class="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5 dark:bg-slate-950"
+                        class="pointer-events-none absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-white shadow transition peer-checked:translate-x-5 dark:bg-slate-950"
                       />
                     </span>
                   </label>
-                  <label v-if="compareMode" class="mt-3 block">
-                    <span class="mb-1 block text-xs font-semibold">Compare Against</span>
+                  <label v-if="compareMode" class="block">
                     <input
                       v-model="compareModel"
                       type="text"
@@ -1693,6 +1692,10 @@ onBeforeUnmount(() => {
                             <p class="font-semibold uppercase tracking-[0.08em] text-fuchsia-700">Time</p>
                             <p class="mt-1 font-mono font-bold text-fuchsia-950">{{ formatUsageDuration(responseUsage?.requestDurationSeconds ?? null) }}s</p>
                           </div>
+                          <div class="rounded-xl border border-amber-100 bg-amber-50/70 py-1 px-2">
+                            <p class="font-semibold uppercase tracking-[0.08em] text-amber-700">Cost</p>
+                            <p class="mt-1 font-mono font-bold text-amber-950">${{ formatUsageCost(responseUsage?.cost ?? null) }}</p>
+                          </div>
                         </div>
                         <h3 class="text-xs font-semibold">Response</h3>
                         <pre class="min-h-40 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ responseText }}</pre>
@@ -1722,6 +1725,10 @@ onBeforeUnmount(() => {
                           <div class="rounded-xl border border-fuchsia-100 bg-fuchsia-50/70 py-1 px-2">
                             <p class="font-semibold uppercase tracking-[0.08em] text-fuchsia-700">Time</p>
                             <p class="mt-1 font-mono font-bold text-fuchsia-950">{{ formatUsageDuration(compareResponseUsage?.requestDurationSeconds ?? null) }}s</p>
+                          </div>
+                          <div class="rounded-xl border border-amber-100 bg-amber-50/70 py-1 px-2">
+                            <p class="font-semibold uppercase tracking-[0.08em] text-amber-700">Cost</p>
+                            <p class="mt-1 font-mono font-bold text-amber-950">${{ formatUsageCost(compareResponseUsage?.cost ?? null) }}</p>
                           </div>
                         </div>
                         <div v-if="compareResponseError" class="rounded-xl border border-rose-300 bg-rose-50 p-2 text-xs text-rose-800">
