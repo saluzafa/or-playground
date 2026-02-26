@@ -1668,14 +1668,32 @@ onBeforeUnmount(() => {
             Directory: <strong>{{ directoryLabel }}</strong>
           </div>
 
-          <div class="mb-4 flex gap-2">
+          <div v-if="hasConnectedDirectory" class="mb-4 space-y-2">
+            <button
+              type="button"
+              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
+              :disabled="!canUseDirectoryApi"
+              @click="connectPresetDirectory"
+            >
+              Change Directory
+            </button>
+            <button
+              type="button"
+              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
+              @click="disconnectPresetDirectory"
+            >
+              Disconnect Directory
+            </button>
+          </div>
+
+          <div v-else class="mb-4 flex gap-2">
             <button
               type="button"
               class="flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
               :disabled="!canUseDirectoryApi"
-              @click="hasConnectedDirectory ? disconnectPresetDirectory() : connectPresetDirectory()"
+              @click="connectPresetDirectory"
             >
-              {{ hasConnectedDirectory ? 'Disconnect Directory' : 'Connect Directory' }}
+              Connect Directory
             </button>
           </div>
 
