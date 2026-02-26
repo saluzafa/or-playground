@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Compartment, EditorState, Prec } from '@codemirror/state'
+import { indentWithTab } from '@codemirror/commands'
 import { EditorView, keymap } from '@codemirror/view'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { markdown } from '@codemirror/lang-markdown'
@@ -110,6 +111,7 @@ onMounted(() => {
     extensions: [
       Prec.highest(
         keymap.of([
+          indentWithTab,
           {
             key: 'Mod-Enter',
             run: () => {
