@@ -1346,7 +1346,7 @@ onBeforeUnmount(() => {
 
       <section class="grid lg:grid-cols-[2fr_20rem] ">
         <article class="p-5">
-          <h1 class="text-2xl mb-4">{{ selectedPreset?.name || "(Unsaved Preset)"  }}</h1>
+          <h1 class="text-2xl mb-4">{{ selectedPreset?.name || "(Unsaved Preset) Your changes will not be saved"  }}</h1>
           <div class="grid grid-cols-12 gap-4">
             <div class="col-span-8">
               <div class="mb-4 grid gap-4 sm:grid-cols-2">
@@ -1708,7 +1708,8 @@ onBeforeUnmount(() => {
             :disabled="!presetDirectoryHandle"
             @click="savePreset"
           >
-            <i class="fas fa-copy fa-fw"></i> Duplicate Current Preset
+            <i class="fas fa-copy fa-fw"></i>
+            {{ selectedPreset ? 'Duplicate Current Preset' : 'Save Preset As' }}
           </button>
 
           <button
