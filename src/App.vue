@@ -65,8 +65,10 @@ const isModelInputFocused = ref(false)
 const isLoadingModels = ref(false)
 const modelLoadError = ref('')
 const openRouterModels = ref<OpenRouterModel[]>([])
+const copyResponseTextState = ref<'idle' | 'copied' | 'error'>('idle')
 let presetAutoSyncTimer: ReturnType<typeof setInterval> | null = null
 let presetAutoSaveTimer: ReturnType<typeof setTimeout> | null = null
+let copyResponseTextTimer: ReturnType<typeof setTimeout> | null = null
 const suppressPresetAutoSave = ref(false)
 
 const presetName = ref('')
@@ -786,6 +788,31 @@ function clearPresetAutoSaveTimer() {
   }
 }
 
+function clearCopyResponseTextTimer() {
+  if (copyResponseTextTimer) {
+    clearTimeout(copyResponseTextTimer)
+    copyResponseTextTimer = null
+  }
+}
+
+async function copyResponseText() {
+  if (!responseText.value.trim()) {
+    return
+  }
+
+  try {
+    await navigator.clipboard.writeText(responseText.value)
+    copyResponseTextState.value = 'copied'
+  } catch {
+    copyResponseTextState.value = 'error'
+  }
+
+  clearCopyResponseTextTimer()
+  copyResponseTextTimer = setTimeout(() => {
+    copyResponseTextState.value = 'idle'
+  }, 1500)
+}
+
 function hasSelectedPresetChanges() {
   if (!selectedPreset.value) {
     return false
@@ -891,6 +918,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   setAutoSync(false)
   clearPresetAutoSaveTimer()
+  clearCopyResponseTextTimer()
   window.removeEventListener('focus', syncPresetsFromDirectory)
   window.removeEventListener('keydown', handleWindowKeydown)
 })
@@ -1011,7 +1039,23 @@ onBeforeUnmount(() => {
                 </div>
 
                 <div>
-                  <h2 class="mb-2 text-sm font-semibold">Response (Text)</h2>
+                  <div class="mb-2 flex items-center justify-between gap-2">
+                    <h2 class="text-sm font-semibold">Response (Text)</h2>
+                    <button
+                      type="button"
+                      class="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
+                      :disabled="!responseText.trim()"
+                      @click="copyResponseText"
+                    >
+                      {{
+                        copyResponseTextState === 'copied'
+                          ? 'Copied'
+                          : copyResponseTextState === 'error'
+                            ? 'Copy failed'
+                            : 'Copy'
+                      }}
+                    </button>
+                  </div>
                   <pre class="min-h-52 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ responseText }}</pre>
                 </div>
 
