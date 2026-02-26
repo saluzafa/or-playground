@@ -55,12 +55,19 @@ const DEFAULT_SETTINGS: RequestSettings = {
 }
 
 const model = ref(DEFAULT_MODEL)
+const compareModel = ref('openai/gpt-4.1')
+const compareMode = ref(false)
 const systemMessage = ref(DEFAULT_SYSTEM_MESSAGE)
 const userMessage = ref(DEFAULT_USER_MESSAGE)
 const responseText = ref('')
 const responseReasoning = ref('')
 const responseJson = ref('')
 const responseUsage = ref<OpenRouterUsage | null>(null)
+const compareResponseText = ref('')
+const compareResponseReasoning = ref('')
+const compareResponseJson = ref('')
+const compareResponseUsage = ref<OpenRouterUsage | null>(null)
+const compareResponseError = ref('')
 const errorMessage = ref('')
 const isDarkMode = ref(false)
 const isSending = ref(false)
@@ -110,7 +117,13 @@ const filteredModelSuggestions = computed(() => {
 })
 const showModelSuggestions = computed(() => isModelInputFocused.value && filteredModelSuggestions.value.length > 0)
 
-const canSend = computed(() => !!settings.apiKey.trim() && !!model.value.trim() && !!userMessage.value.trim())
+const canSend = computed(
+  () =>
+    !!settings.apiKey.trim() &&
+    !!model.value.trim() &&
+    !!userMessage.value.trim() &&
+    (!compareMode.value || !!compareModel.value.trim()),
+)
 
 async function openDbWithVersion(version?: number) {
   return await new Promise<IDBDatabase>((resolve, reject) => {
@@ -696,6 +709,49 @@ function formatUsageDuration(value: number | null): string {
   })
 }
 
+async function runPromptRequest(targetModel: string, messages: Array<{ role: 'system' | 'user'; content: string }>) {
+  const requestStartedAt = performance.now()
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${settings.apiKey.trim()}`,
+    },
+    body: JSON.stringify({
+      model: targetModel,
+      messages,
+      temperature: settings.temperature,
+      top_p: settings.topP,
+      ...(settings.reasoningEnabled
+        ? {
+            reasoning: {
+              effort: settings.reasoningEffort,
+            },
+          }
+        : {}),
+    }),
+  })
+  const requestDurationSeconds = (performance.now() - requestStartedAt) / 1000
+  const payload = await response.json()
+
+  if (!response.ok) {
+    const apiError =
+      typeof payload?.error?.message === 'string'
+        ? payload.error.message
+        : `OpenRouter request failed with status ${response.status}`
+    throw new Error(apiError)
+  }
+
+  const content = payload?.choices?.[0]?.message?.content
+  const reasoning = payload?.choices?.[0]?.message?.reasoning
+  return {
+    text: toTextContent(content) || '[No text content in model response]',
+    reasoning: toTextContent(reasoning),
+    json: JSON.stringify(payload, null, 2),
+    usage: extractUsage(payload, requestDurationSeconds),
+  }
+}
+
 async function sendPrompt() {
   if (!canSend.value) {
     return
@@ -704,6 +760,11 @@ async function sendPrompt() {
   isSending.value = true
   errorMessage.value = ''
   responseUsage.value = null
+  compareResponseUsage.value = null
+  compareResponseError.value = ''
+  compareResponseText.value = ''
+  compareResponseReasoning.value = ''
+  compareResponseJson.value = ''
 
   try {
     const messages: Array<{ role: 'system' | 'user'; content: string }> = []
@@ -712,45 +773,39 @@ async function sendPrompt() {
     }
     messages.push({ role: 'user', content: userMessage.value.trim() })
 
-    const requestStartedAt = performance.now()
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${settings.apiKey.trim()}`,
-      },
-      body: JSON.stringify({
-        model: model.value.trim(),
-        messages,
-        temperature: settings.temperature,
-        top_p: settings.topP,
-        ...(settings.reasoningEnabled
-          ? {
-              reasoning: {
-                effort: settings.reasoningEffort,
-              },
-            }
-          : {}),
-      }),
-    })
-    const requestDurationSeconds = (performance.now() - requestStartedAt) / 1000
+    const primaryModel = model.value.trim()
+    const secondaryModel = compareModel.value.trim()
 
-    const payload = await response.json()
+    const [primaryResult, secondaryResult] = await Promise.all([
+      runPromptRequest(primaryModel, messages),
+      compareMode.value
+        ? runPromptRequest(secondaryModel, messages)
+            .then((result) => ({ ...result, error: '' }))
+            .catch((error) => ({
+              text: '',
+              reasoning: '',
+              json: '',
+              usage: null,
+              error: error instanceof Error ? error.message : 'Request failed.',
+            }))
+        : Promise.resolve(null),
+    ])
 
-    if (!response.ok) {
-      const apiError =
-        typeof payload?.error?.message === 'string'
-          ? payload.error.message
-          : `OpenRouter request failed with status ${response.status}`
-      throw new Error(apiError)
+    responseText.value = primaryResult.text
+    responseReasoning.value = primaryResult.reasoning
+    responseJson.value = primaryResult.json
+    responseUsage.value = primaryResult.usage
+
+    if (secondaryResult) {
+      compareResponseText.value = secondaryResult.text
+      compareResponseReasoning.value = secondaryResult.reasoning
+      compareResponseJson.value = secondaryResult.json
+      compareResponseUsage.value = secondaryResult.usage
+      compareResponseError.value = secondaryResult.error
+      if (secondaryResult.error) {
+        errorMessage.value = 'One model request failed. See compare result for details.'
+      }
     }
-
-    const content = payload?.choices?.[0]?.message?.content
-    const reasoning = payload?.choices?.[0]?.message?.reasoning
-    responseText.value = toTextContent(content) || '[No text content in model response]'
-    responseReasoning.value = toTextContent(reasoning)
-    responseJson.value = JSON.stringify(payload, null, 2)
-    responseUsage.value = extractUsage(payload, requestDurationSeconds)
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Request failed.'
   } finally {
@@ -997,7 +1052,7 @@ onBeforeUnmount(() => {
         </div>
       </header>
 
-      <section class="grid lg:grid-cols-[1fr_24rem] ">
+      <section class="grid lg:grid-cols-[2fr_20rem] ">
         <article class="p-5">
           <div class="grid grid-cols-12 gap-4">
             <div class="col-span-8">
@@ -1032,6 +1087,29 @@ onBeforeUnmount(() => {
                   <span v-if="isLoadingModels" class="mt-1 block text-xs text-slate-500 dark:text-slate-400">Loading model suggestions...</span>
                   <span v-else-if="modelLoadError" class="mt-1 block text-xs text-rose-600">{{ modelLoadError }}</span>
                 </label>
+                <div class="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                  <label class="flex items-center justify-between gap-3">
+                    <span class="text-sm font-semibold">Compare Mode</span>
+                    <span class="relative inline-flex cursor-pointer items-center">
+                      <input v-model="compareMode" type="checkbox" class="peer sr-only" />
+                      <span
+                        class="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-slate-900 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-slate-400 dark:bg-slate-700 dark:peer-checked:bg-slate-300 dark:peer-focus:ring-slate-500"
+                      />
+                      <span
+                        class="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5 dark:bg-slate-950"
+                      />
+                    </span>
+                  </label>
+                  <label v-if="compareMode" class="mt-3 block">
+                    <span class="mb-1 block text-xs font-semibold">Compare Against</span>
+                    <input
+                      v-model="compareModel"
+                      type="text"
+                      placeholder="openai/gpt-4.1"
+                      class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none ring-0 transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
+                    />
+                  </label>
+                </div>
               </div>
 
               <label class="mb-4 block">
@@ -1051,14 +1129,13 @@ onBeforeUnmount(() => {
 
             <div class="col-span-4">
               <div class="space-y-4">
-
-                <div>
-                  <h2 class="mb-2 text-sm font-semibold">Response Usage</h2>
-                  <div class="">
+                <template v-if="!compareMode">
+                  <div>
+                    <h2 class="mb-2 text-sm font-semibold">Response Usage</h2>
                     <div class="grid gap-3 sm:grid-cols-3 text-[11px]">
                       <div class="rounded-xl border border-sky-100 bg-sky-50/70 py-1 px-2">
                         <p class="font-semibold uppercase tracking-[0.08em] text-sky-700">Prompt</p>
-                        <p class="m-0 p-0 mt-1 font-mono font-bold text-sky-950">{{ formatUsageNumber(responseUsage?.promptTokens ?? null) }} tokens</p>
+                        <p class="m-0 mt-1 p-0 font-mono font-bold text-sky-950">{{ formatUsageNumber(responseUsage?.promptTokens ?? null) }} tokens</p>
                       </div>
                       <div class="rounded-xl border border-indigo-100 bg-indigo-50/70 py-1 px-2">
                         <p class="font-semibold uppercase tracking-[0.08em] text-indigo-700">Completion</p>
@@ -1082,38 +1159,105 @@ onBeforeUnmount(() => {
                       </div>
                     </div>
                   </div>
-                </div>
 
-                <div>
-                  <div class="mb-2 flex items-center justify-between gap-2">
-                    <h2 class="text-sm font-semibold">Response (Text)</h2>
-                    <button
-                      type="button"
-                      class="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
-                      :disabled="!responseText.trim()"
-                      @click="copyResponseText"
-                    >
-                      {{
-                        copyResponseTextState === 'copied'
-                          ? 'Copied'
-                          : copyResponseTextState === 'error'
-                            ? 'Copy failed'
-                            : 'Copy'
-                      }}
-                    </button>
+                  <div>
+                    <div class="mb-2 flex items-center justify-between gap-2">
+                      <h2 class="text-sm font-semibold">Response (Text)</h2>
+                      <button
+                        type="button"
+                        class="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
+                        :disabled="!responseText.trim()"
+                        @click="copyResponseText"
+                      >
+                        {{
+                          copyResponseTextState === 'copied'
+                            ? 'Copied'
+                            : copyResponseTextState === 'error'
+                              ? 'Copy failed'
+                              : 'Copy'
+                        }}
+                      </button>
+                    </div>
+                    <pre class="min-h-52 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ responseText }}</pre>
                   </div>
-                  <pre class="min-h-52 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ responseText }}</pre>
-                </div>
 
-                <div>
-                  <h2 class="mb-2 text-sm font-semibold">Reasoning</h2>
-                  <pre class="min-h-52 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ responseReasoning }}</pre>
-                </div>
+                  <div>
+                    <h2 class="mb-2 text-sm font-semibold">Reasoning</h2>
+                    <pre class="min-h-52 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ responseReasoning }}</pre>
+                  </div>
 
-                <div>
-                  <h2 class="mb-2 text-sm font-semibold">Response (JSON)</h2>
-                  <pre class="min-h-52 overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ responseJson }}</pre>
-                </div>
+                  <div>
+                    <h2 class="mb-2 text-sm font-semibold">Response (JSON)</h2>
+                    <pre class="min-h-52 overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ responseJson }}</pre>
+                  </div>
+                </template>
+
+                <template v-else>
+                  <div class="grid grid-cols-12">
+                    <div class="col-span-6">
+                        <div class="space-y-4 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                        <h2 class="text-sm font-semibold">Model A: {{ model }}</h2>
+                        <div class="grid gap-2 sm:grid-cols-2 text-[11px]">
+                          <div class="rounded-xl border border-sky-100 bg-sky-50/70 py-1 px-2">
+                            <p class="font-semibold uppercase tracking-[0.08em] text-sky-700">Prompt</p>
+                            <p class="mt-1 font-mono font-bold text-sky-950">{{ formatUsageNumber(responseUsage?.promptTokens ?? null) }}</p>
+                          </div>
+                          <div class="rounded-xl border border-indigo-100 bg-indigo-50/70 py-1 px-2">
+                            <p class="font-semibold uppercase tracking-[0.08em] text-indigo-700">Completion</p>
+                            <p class="mt-1 font-mono font-bold text-indigo-950">{{ formatUsageNumber(responseUsage?.completionTokens ?? null) }}</p>
+                          </div>
+                          <div class="rounded-xl border border-emerald-100 bg-emerald-50/70 py-1 px-2">
+                            <p class="font-semibold uppercase tracking-[0.08em] text-emerald-700">Total</p>
+                            <p class="mt-1 font-mono font-bold text-emerald-950">{{ formatUsageNumber(responseUsage?.totalTokens ?? null) }}</p>
+                          </div>
+                          <div class="rounded-xl border border-fuchsia-100 bg-fuchsia-50/70 py-1 px-2">
+                            <p class="font-semibold uppercase tracking-[0.08em] text-fuchsia-700">Time</p>
+                            <p class="mt-1 font-mono font-bold text-fuchsia-950">{{ formatUsageDuration(responseUsage?.requestDurationSeconds ?? null) }}s</p>
+                          </div>
+                        </div>
+                        <h3 class="text-xs font-semibold">Response</h3>
+                        <pre class="min-h-40 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ responseText }}</pre>
+                        <h3 class="text-xs font-semibold">Reasoning</h3>
+                        <pre class="min-h-40 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ responseReasoning }}</pre>
+                        <h3 class="text-xs font-semibold">JSON</h3>
+                        <pre class="min-h-40 overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ responseJson }}</pre>
+                      </div>
+                    </div>
+
+                    <div class="col-span-6">
+                      <div class="space-y-4 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                        <h2 class="text-sm font-semibold">Model B: {{ compareModel }}</h2>
+                        <div class="grid gap-2 sm:grid-cols-2 text-[11px]">
+                          <div class="rounded-xl border border-sky-100 bg-sky-50/70 py-1 px-2">
+                            <p class="font-semibold uppercase tracking-[0.08em] text-sky-700">Prompt</p>
+                            <p class="mt-1 font-mono font-bold text-sky-950">{{ formatUsageNumber(compareResponseUsage?.promptTokens ?? null) }}</p>
+                          </div>
+                          <div class="rounded-xl border border-indigo-100 bg-indigo-50/70 py-1 px-2">
+                            <p class="font-semibold uppercase tracking-[0.08em] text-indigo-700">Completion</p>
+                            <p class="mt-1 font-mono font-bold text-indigo-950">{{ formatUsageNumber(compareResponseUsage?.completionTokens ?? null) }}</p>
+                          </div>
+                          <div class="rounded-xl border border-emerald-100 bg-emerald-50/70 py-1 px-2">
+                            <p class="font-semibold uppercase tracking-[0.08em] text-emerald-700">Total</p>
+                            <p class="mt-1 font-mono font-bold text-emerald-950">{{ formatUsageNumber(compareResponseUsage?.totalTokens ?? null) }}</p>
+                          </div>
+                          <div class="rounded-xl border border-fuchsia-100 bg-fuchsia-50/70 py-1 px-2">
+                            <p class="font-semibold uppercase tracking-[0.08em] text-fuchsia-700">Time</p>
+                            <p class="mt-1 font-mono font-bold text-fuchsia-950">{{ formatUsageDuration(compareResponseUsage?.requestDurationSeconds ?? null) }}s</p>
+                          </div>
+                        </div>
+                        <div v-if="compareResponseError" class="rounded-xl border border-rose-300 bg-rose-50 p-2 text-xs text-rose-800">
+                          {{ compareResponseError }}
+                        </div>
+                        <h3 class="text-xs font-semibold">Response</h3>
+                        <pre class="min-h-40 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ compareResponseText }}</pre>
+                        <h3 class="text-xs font-semibold">Reasoning</h3>
+                        <pre class="min-h-40 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ compareResponseReasoning }}</pre>
+                        <h3 class="text-xs font-semibold">JSON</h3>
+                        <pre class="min-h-40 overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ compareResponseJson }}</pre>
+                      </div>
+                    </div>
+                  </div>
+                </template>
               </div>
             </div>
           </div>
