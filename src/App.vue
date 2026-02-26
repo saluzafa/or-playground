@@ -603,6 +603,11 @@ async function deleteSelectedPreset() {
     return
   }
 
+  const shouldDelete = window.confirm(`Delete preset "${selectedPreset.value.name}"? This cannot be undone.`)
+  if (!shouldDelete) {
+    return
+  }
+
   try {
     await presetDirectoryHandle.value.removeEntry(selectedPreset.value.filename)
     selectedPresetId.value = ''
