@@ -800,6 +800,15 @@ async function createNewPreset() {
     return
   }
 
+  if (!selectedPreset.value) {
+    const shouldContinue = window.confirm(
+      'No preset is currently selected. Creating a new preset will discard your current unsaved changes. Continue?',
+    )
+    if (!shouldContinue) {
+      return
+    }
+  }
+
   const promptedName = window.prompt('Enter the name for the new preset:', 'New preset')
   if (promptedName === null) {
     return
