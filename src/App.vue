@@ -1325,7 +1325,7 @@ onBeforeUnmount(() => {
       <header class="flex flex-wrap items-center justify-between gap-4 bg-slate-800 p-6 text-white dark:bg-slate-950">
         <div>
           <h1 class="text-2xl tracking-tight">OpenRouter Playground</h1>
-          <p class="text-sm text-slate-400 dark:text-slate-300">Experiment with models, prompts, and reusable local presets.</p>
+          <p class="text-sm text-slate-400 dark:text-slate-300">Experiment with models, prompts, and reusable local presets. Use <code>Cmd+R</code>/<code>Ctrl+R</code> shortcut to execute requests.</p>
         </div>
         <div class="flex items-center gap-3">
           <button
@@ -1337,7 +1337,12 @@ onBeforeUnmount(() => {
           </button>
           <button
             type="button"
-            class="rounded-xl bg-rose-900 px-4 py-2 text-2xl font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400 dark:bg-rose-700 dark:hover:bg-rose-600 dark:disabled:bg-slate-600"
+            class="rounded-xl px-4 py-2 text-2xl font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-slate-400 dark:disabled:bg-slate-600"
+            :class="
+              isSending
+                ? 'bg-rose-700 hover:bg-rose-600 dark:bg-rose-700 dark:hover:bg-rose-600'
+                : 'bg-emerald-700 hover:bg-emerald-600 dark:bg-emerald-700 dark:hover:bg-emerald-600'
+            "
             :disabled="!isSending && !canSend"
             @click="isSending ? cancelRequest() : sendPrompt()"
           >
