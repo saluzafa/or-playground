@@ -40,6 +40,7 @@ function editorTheme(isDark: boolean) {
     {
       '&': {
         height: 'auto',
+        cursor: 'text',
         ...(isDark
           ? {
               backgroundColor: '#0b1220',
@@ -80,7 +81,18 @@ function editorTheme(isDark: boolean) {
       '.cm-selectionBackground, ::selected': isDark
         ? { backgroundColor: '#334155 !important' }
         : { backgroundColor: '#cbd5e1 !important' },
-      '.cm-cursor, .cm-dropCursor': isDark ? { borderLeftColor: '#e2e8f0' } : { borderLeftColor: '#0f172a' },
+      '.cm-cursor': isDark
+        ? {
+            borderLeft: 'none',
+            width: '1ch',
+            backgroundColor: 'rgba(255, 255, 255, 0.2)',
+          }
+        : {
+            borderLeft: 'none',
+            width: '1ch',
+            backgroundColor: 'rgba(0, 0, 0, 0.2)',
+          },
+      '.cm-dropCursor': isDark ? { borderLeftColor: '#e2e8f0' } : { borderLeftColor: '#0f172a' },
     },
     { dark: isDark },
   )
