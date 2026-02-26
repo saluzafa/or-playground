@@ -501,7 +501,13 @@ async function savePreset() {
     return
   }
 
-  const name = presetName.value.trim() || selectedPreset.value?.name || 'Untitled preset'
+  const defaultName = presetName.value.trim() || selectedPreset.value?.name || 'Untitled preset'
+  const promptedName = window.prompt('Enter the name for the new preset:', defaultName)
+  if (promptedName === null) {
+    return
+  }
+
+  const name = promptedName.trim() || defaultName
   const now = new Date().toISOString()
   const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`
   const filename = `${id}-${cleanFilename(name)}.json`
@@ -519,7 +525,7 @@ async function savePreset() {
 
   try {
     await writePreset(preset)
-    presetName.value = ''
+    presetName.value = preset.name
     selectedPresetId.value = preset.id
     await syncPresetsFromDirectory()
   } catch (error) {
@@ -1146,7 +1152,7 @@ onBeforeUnmount(() => {
 
           <button
             type="button"
-            class="mb-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
+            class="mb-2 w-full rounded-xl border text-white border-slate-300 px-3 py-2 text-sm font-semibold transition hover:border-slate-400 bg-emerald-600 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:text-neutral-400 disabled:bg-neutral-200 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
             :disabled="!canRenameSelectedPreset"
             @click="renameSelectedPreset"
           >
@@ -1155,11 +1161,11 @@ onBeforeUnmount(() => {
 
           <button
             type="button"
-            class="mb-2 w-full rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-emerald-300"
+            class="mb-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
             :disabled="!presetDirectoryHandle"
             @click="savePreset"
           >
-            Save Current As Preset
+            <i class="fas fa-copy fa-fw"></i> Duplicate Current Preset
           </button>
 
           <button
@@ -1168,7 +1174,7 @@ onBeforeUnmount(() => {
             :disabled="!presetDirectoryHandle"
             @click="createNewPreset"
           >
-            Create New Preset
+            <i class="fas fa-plus fa-fw"></i> Create New Preset
           </button>
 
           <label class="mb-2 block">
@@ -1187,7 +1193,7 @@ onBeforeUnmount(() => {
           <div class="flex gap-2">
             <button
               type="button"
-              class="flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
+              class="flex-1 px-3 py-2 text-sm font-semibold transition btn-success"
               :disabled="!selectedPreset"
               @click="loadSelectedPreset"
             >
