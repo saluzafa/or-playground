@@ -1219,6 +1219,13 @@ function handleModelInputKeydown(event: KeyboardEvent) {
     if (selectedSuggestion) {
       applyModelSuggestion(selectedSuggestion.id)
     }
+    return
+  }
+
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    activeModelSuggestionIndex.value = -1
+    isModelInputFocused.value = false
   }
 }
 
