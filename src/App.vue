@@ -80,6 +80,7 @@ const compareResponseError = ref('')
 const errorMessage = ref('')
 const isDarkMode = ref(false)
 const isSending = ref(false)
+const activeRequestController = ref<AbortController | null>(null)
 const isModelInputFocused = ref(false)
 const isLoadingModels = ref(false)
 const modelLoadError = ref('')
@@ -977,6 +978,7 @@ async function runPromptRequest(targetModel: string, messages: Array<{ role: 'sy
   const requestStartedAt = performance.now()
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
+    signal: activeRequestController.value?.signal,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${settings.apiKey.trim()}`,
@@ -1016,11 +1018,20 @@ async function runPromptRequest(targetModel: string, messages: Array<{ role: 'sy
   }
 }
 
+function cancelRequest() {
+  if (!isSending.value || !activeRequestController.value) {
+    return
+  }
+  activeRequestController.value.abort()
+}
+
 async function sendPrompt() {
-  if (!canSend.value) {
+  if (isSending.value || !canSend.value) {
     return
   }
 
+  const requestController = new AbortController()
+  activeRequestController.value = requestController
   isSending.value = true
   errorMessage.value = ''
   responseUsage.value = null
@@ -1073,8 +1084,15 @@ async function sendPrompt() {
       }
     }
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Request failed.'
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      errorMessage.value = 'Request canceled.'
+    } else {
+      errorMessage.value = error instanceof Error ? error.message : 'Request failed.'
+    }
   } finally {
+    if (activeRequestController.value === requestController) {
+      activeRequestController.value = null
+    }
     isSending.value = false
   }
 }
@@ -1320,10 +1338,10 @@ onBeforeUnmount(() => {
           <button
             type="button"
             class="rounded-xl bg-rose-900 px-4 py-2 text-2xl font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400 dark:bg-rose-700 dark:hover:bg-rose-600 dark:disabled:bg-slate-600"
-            :disabled="isSending || !canSend"
-            @click="sendPrompt"
+            :disabled="!isSending && !canSend"
+            @click="isSending ? cancelRequest() : sendPrompt()"
           >
-            {{ isSending ? 'Sending…' : 'Execute Request' }}
+            {{ isSending ? 'Cancel' : 'Execute Request' }}
           </button>
         </div>
       </header>
