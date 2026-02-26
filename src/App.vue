@@ -1412,23 +1412,15 @@ onBeforeUnmount(() => {
         <div class="flex items-center gap-3">
           <button
             type="button"
-            class="rounded-xl border border-slate-500 bg-slate-700 px-3 py-2 text-sm font-semibold text-slate-100 transition hover:bg-slate-600 dark:border-slate-400 dark:bg-slate-800 dark:hover:bg-slate-700"
+            class="rounded-xl border border-slate-500 bg-slate-700 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:bg-slate-600 dark:border-slate-400 dark:bg-slate-800 dark:hover:bg-slate-700"
             @click="toggleDarkMode"
           >
-            {{ isDarkMode ? 'Light Mode' : 'Dark Mode' }}
-          </button>
-          <button
-            type="button"
-            class="rounded-xl px-4 py-2 text-2xl font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-slate-400 dark:disabled:bg-slate-600"
-            :class="
-              isSending
-                ? 'bg-rose-700 hover:bg-rose-600 dark:bg-rose-700 dark:hover:bg-rose-600'
-                : 'bg-emerald-700 hover:bg-emerald-600 dark:bg-emerald-700 dark:hover:bg-emerald-600'
-            "
-            :disabled="!isSending && !canSend"
-            @click="isSending ? cancelRequest() : sendPrompt()"
-          >
-            {{ isSending ? 'Cancel' : 'Execute Request' }}
+            <span v-if="isDarkMode">
+              <i class="fas fa-sun"></i> Light
+            </span>
+            <span v-else>
+              <i class="fas fa-moon"></i> Dark
+            </span>
           </button>
         </div>
       </header>
@@ -1765,6 +1757,31 @@ onBeforeUnmount(() => {
         </article>
 
         <aside class="p-4">
+          <div class="mb-2">
+            <button
+              type="button"
+              class="w-full rounded-xl px-4 py-2 font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-slate-400 dark:disabled:bg-slate-600"
+              :class="
+                isSending
+                  ? 'bg-rose-700 hover:bg-rose-600 dark:bg-rose-700 dark:hover:bg-rose-600'
+                  : 'bg-emerald-700 hover:bg-emerald-600 dark:bg-emerald-700 dark:hover:bg-emerald-600'
+              "
+              :disabled="!isSending && !canSend"
+              @click="isSending ? cancelRequest() : sendPrompt()"
+            >
+              <span v-if="isSending">
+                <i class="fas fa-cancel fa-fw"></i>
+                Cancel
+              </span>
+              <span v-else>
+                <i class="fas fa-play fa-fw"></i>
+                Run request
+              </span>
+            </button>
+          </div>
+
+          <hr class="mb-2 border-t-2 border-t-slate-200" />
+
           <h2 class="mb-2 text-base font-black tracking-tight">Preset Manager</h2>
           <p class="mb-4 text-xs text-slate-600 dark:text-slate-400">Presets are saved as JSON files in a synced local directory.</p>
 
@@ -1809,7 +1826,7 @@ onBeforeUnmount(() => {
             @click="renameSelectedPreset"
           >
             <i class="fas fa-pen-to-square fa-fw"></i>
-            Rename Selected Preset
+            Rename Current Preset
           </button>
 
           <button
