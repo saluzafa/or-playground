@@ -85,6 +85,7 @@ const isLoadingModels = ref(false)
 const modelLoadError = ref('')
 const openRouterModels = ref<OpenRouterModel[]>([])
 const copyResponseTextState = ref<'idle' | 'copied' | 'error'>('idle')
+const responseTextViewMode = ref<'raw' | 'preview'>('raw')
 let presetAutoSyncTimer: ReturnType<typeof setInterval> | null = null
 let presetAutoSaveTimer: ReturnType<typeof setTimeout> | null = null
 let copyResponseTextTimer: ReturnType<typeof setTimeout> | null = null
@@ -357,6 +358,164 @@ function toTextContent(content: unknown): string {
   }
   return ''
 }
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function sanitizeMarkdownHref(value: string): string | null {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+  if (/^https?:\/\//i.test(trimmed) || /^mailto:/i.test(trimmed)) {
+    return trimmed
+  }
+  return null
+}
+
+function renderMarkdownInline(value: string): string {
+  const inlineCodeMatches: string[] = []
+  let rendered = value.replace(/`([^`\n]+?)`/g, (_, code: string) => {
+    const token = `@@INLINE_CODE_${inlineCodeMatches.length}@@`
+    inlineCodeMatches.push(`<code>${escapeHtml(code)}</code>`)
+    return token
+  })
+  rendered = escapeHtml(rendered)
+
+  rendered = rendered.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label: string, href: string) => {
+    const safeHref = sanitizeMarkdownHref(href)
+    if (!safeHref) {
+      return `${label} (${href})`
+    }
+    return `<a href="${escapeHtml(safeHref)}" target="_blank" rel="noopener noreferrer">${label}</a>`
+  })
+
+  rendered = rendered
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/__([^_]+)__/g, '<strong>$1</strong>')
+    .replace(/(^|[^\*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>')
+    .replace(/(^|[^_])_([^_\n]+)_(?!_)/g, '$1<em>$2</em>')
+
+  for (let index = 0; index < inlineCodeMatches.length; index += 1) {
+    rendered = rendered.replace(`@@INLINE_CODE_${index}@@`, inlineCodeMatches[index] ?? '')
+  }
+
+  return rendered
+}
+
+function renderMarkdownToHtml(value: string): string {
+  const lines = value.replace(/\r\n/g, '\n').split('\n')
+  const blocks: string[] = []
+  let index = 0
+
+  const isBlank = (line: string) => line.trim().length === 0
+  const isFenceStart = (line: string) => /^```/.test(line.trim())
+  const isHeading = (line: string) => /^(#{1,6})\s+/.test(line)
+  const isHorizontalRule = (line: string) => /^\s*(\*{3,}|-{3,}|_{3,})\s*$/.test(line)
+  const isQuoteLine = (line: string) => /^\s*>\s?/.test(line)
+  const isUnorderedListLine = (line: string) => /^\s*[-*+]\s+/.test(line)
+  const isOrderedListLine = (line: string) => /^\s*\d+\.\s+/.test(line)
+  const startsBlock = (line: string) =>
+    isFenceStart(line) ||
+    isHeading(line) ||
+    isHorizontalRule(line) ||
+    isQuoteLine(line) ||
+    isUnorderedListLine(line) ||
+    isOrderedListLine(line)
+
+  while (index < lines.length) {
+    const line = lines[index] ?? ''
+
+    if (isBlank(line)) {
+      index += 1
+      continue
+    }
+
+    if (isFenceStart(line)) {
+      const language = (line.trim().match(/^```([\w-]+)?/)?.[1] ?? '').toLowerCase()
+      index += 1
+      const codeLines: string[] = []
+      while (index < lines.length && !/^```/.test(lines[index]?.trim() ?? '')) {
+        codeLines.push(lines[index] ?? '')
+        index += 1
+      }
+      if (index < lines.length) {
+        index += 1
+      }
+      blocks.push(
+        `<pre><code${language ? ` class="language-${escapeHtml(language)}"` : ''}>${escapeHtml(codeLines.join('\n'))}</code></pre>`,
+      )
+      continue
+    }
+
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/)
+    if (headingMatch) {
+      const level = headingMatch[1]?.length ?? 1
+      const text = headingMatch[2] ?? ''
+      blocks.push(`<h${level}>${renderMarkdownInline(text)}</h${level}>`)
+      index += 1
+      continue
+    }
+
+    if (isHorizontalRule(line)) {
+      blocks.push('<hr />')
+      index += 1
+      continue
+    }
+
+    if (isQuoteLine(line)) {
+      const quoteLines: string[] = []
+      while (index < lines.length && isQuoteLine(lines[index] ?? '')) {
+        quoteLines.push((lines[index] ?? '').replace(/^\s*>\s?/, ''))
+        index += 1
+      }
+      blocks.push(`<blockquote>${renderMarkdownInline(quoteLines.join('\n')).replace(/\n/g, '<br />')}</blockquote>`)
+      continue
+    }
+
+    if (isUnorderedListLine(line)) {
+      const listItems: string[] = []
+      while (index < lines.length && isUnorderedListLine(lines[index] ?? '')) {
+        const listLine = lines[index] ?? ''
+        listItems.push(`<li>${renderMarkdownInline(listLine.replace(/^\s*[-*+]\s+/, ''))}</li>`)
+        index += 1
+      }
+      blocks.push(`<ul>${listItems.join('')}</ul>`)
+      continue
+    }
+
+    if (isOrderedListLine(line)) {
+      const listItems: string[] = []
+      const firstMatch = line.match(/^\s*(\d+)\.\s+/)
+      const start = Number(firstMatch?.[1] ?? '1')
+      while (index < lines.length && isOrderedListLine(lines[index] ?? '')) {
+        const listLine = lines[index] ?? ''
+        listItems.push(`<li>${renderMarkdownInline(listLine.replace(/^\s*\d+\.\s+/, ''))}</li>`)
+        index += 1
+      }
+      const startAttr = Number.isFinite(start) && start > 1 ? ` start="${start}"` : ''
+      blocks.push(`<ol${startAttr}>${listItems.join('')}</ol>`)
+      continue
+    }
+
+    const paragraphLines: string[] = []
+    while (index < lines.length && !isBlank(lines[index] ?? '') && !startsBlock(lines[index] ?? '')) {
+      paragraphLines.push(lines[index] ?? '')
+      index += 1
+    }
+    blocks.push(`<p>${renderMarkdownInline(paragraphLines.join('\n')).replace(/\n/g, '<br />')}</p>`)
+  }
+
+  return blocks.join('')
+}
+
+const renderedResponseTextHtml = computed(() => renderMarkdownToHtml(responseText.value))
 
 function getPresetIdFromUrl() {
   if (typeof window === 'undefined') {
@@ -1349,22 +1508,50 @@ onBeforeUnmount(() => {
                   <div>
                     <div class="mb-2 flex items-center justify-between gap-2">
                       <h2 class="text-sm font-semibold">Response (Text)</h2>
-                      <button
-                        type="button"
-                        class="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
-                        :disabled="!responseText.trim()"
-                        @click="copyResponseText"
-                      >
-                        {{
-                          copyResponseTextState === 'copied'
-                            ? 'Copied'
-                            : copyResponseTextState === 'error'
-                              ? 'Copy failed'
-                              : 'Copy'
-                        }}
-                      </button>
+                      <div class="flex items-center gap-2">
+                        <div class="inline-flex overflow-hidden rounded-md border border-slate-300 dark:border-slate-700">
+                          <button
+                            type="button"
+                            class="bg-white px-2 py-1 text-[11px] font-semibold transition dark:bg-slate-950"
+                            :class="responseTextViewMode === 'raw' ? 'bg-slate-900 text-slate-800 dark:bg-slate-200 dark:text-slate-300' : 'text-slate-400 hover:bg-slate-100 dark:text-slate-600 dark:hover:bg-slate-800'"
+                            @click="responseTextViewMode = 'raw'"
+                          >
+                            Raw
+                          </button>
+                          <button
+                            type="button"
+                            class="bg-white px-2 py-1 text-[11px] font-semibold transition dark:bg-slate-950"
+                            :class="responseTextViewMode === 'preview' ? 'bg-slate-900 text-slate-800 dark:bg-slate-200 dark:text-slate-300' : 'text-slate-400 hover:bg-slate-100 dark:text-slate-600 dark:hover:bg-slate-800'"
+                            @click="responseTextViewMode = 'preview'"
+                          >
+                            Preview
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          class="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
+                          :disabled="!responseText.trim()"
+                          @click="copyResponseText"
+                        >
+                          {{
+                            copyResponseTextState === 'copied'
+                              ? 'Copied'
+                              : copyResponseTextState === 'error'
+                                ? 'Copy failed'
+                                : 'Copy'
+                          }}
+                        </button>
+                      </div>
                     </div>
-                    <pre class="min-h-52 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950">{{ responseText }}</pre>
+                    <pre
+                      v-if="responseTextViewMode === 'raw'"
+                      class="min-h-52 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100 dark:border-slate-700 dark:bg-slate-950"
+                    >{{ responseText }}</pre>
+                    <div
+                      v-else
+                      class="markdown-preview min-h-52 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      v-html="renderedResponseTextHtml"
+                    ></div>
                   </div>
 
                   <div>

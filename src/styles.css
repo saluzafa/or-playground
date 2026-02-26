@@ -19,3 +19,114 @@ body {
 .btn-success {
   @apply text-white bg-emerald-600 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:text-neutral-400 disabled:bg-neutral-200 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500 rounded-xl;
 }
+
+.markdown-preview > *:first-child {
+  margin-top: 0;
+}
+
+.markdown-preview > *:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4,
+.markdown-preview h5,
+.markdown-preview h6 {
+  margin: 1rem 0 0.5rem;
+  line-height: 1.25;
+  font-weight: 700;
+}
+
+.markdown-preview h1 {
+  font-size: 1.5rem;
+}
+
+.markdown-preview h2 {
+  font-size: 1.25rem;
+}
+
+.markdown-preview h3 {
+  font-size: 1.125rem;
+}
+
+.markdown-preview p {
+  margin: 0.75rem 0;
+  line-height: 1.6;
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  margin: 0.75rem 0;
+  padding-left: 1.25rem;
+}
+
+.markdown-preview ul {
+  list-style: disc;
+}
+
+.markdown-preview ol {
+  list-style: decimal;
+}
+
+.markdown-preview li {
+  margin: 0.25rem 0;
+}
+
+.markdown-preview a {
+  color: #0369a1;
+  text-decoration: underline;
+}
+
+.dark .markdown-preview a {
+  color: #7dd3fc;
+}
+
+.markdown-preview code {
+  border-radius: 0.25rem;
+  background: #e2e8f0;
+  padding: 0.125rem 0.3rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.85em;
+}
+
+.dark .markdown-preview code {
+  background: #1e293b;
+}
+
+.markdown-preview pre {
+  overflow: auto;
+  border-radius: 0.75rem;
+  background: #0f172a;
+  padding: 0.75rem;
+  color: #f8fafc;
+}
+
+.markdown-preview pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.markdown-preview blockquote {
+  margin: 0.75rem 0;
+  border-left: 3px solid #94a3b8;
+  padding-left: 0.75rem;
+  color: #334155;
+}
+
+.dark .markdown-preview blockquote {
+  border-left-color: #475569;
+  color: #cbd5e1;
+}
+
+.markdown-preview hr {
+  margin: 1rem 0;
+  border: 0;
+  border-top: 1px solid #cbd5e1;
+}
+
+.dark .markdown-preview hr {
+  border-top-color: #334155;
+}
