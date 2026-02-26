@@ -1238,25 +1238,31 @@ onBeforeUnmount(() => {
                     :key="index"
                     class="grid grid-cols-12 gap-2"
                   >
-                    <input
-                      v-model="entry.name"
-                      type="text"
-                      placeholder="my_var"
-                      class="col-span-4 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
-                    />
-                    <input
-                      v-model="entry.value"
-                      type="text"
-                      placeholder="Variable value"
-                      class="col-span-7 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
-                    />
-                    <button
-                      type="button"
-                      class="col-span-1 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 transition hover:border-rose-300"
-                      @click="removeVariable(index)"
-                    >
-                      X
-                    </button>
+                    <div class="col-span-3">
+                      <input
+                        v-model="entry.name"
+                        type="text"
+                        placeholder="my_var"
+                        class="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
+                      />
+                    </div>
+                    <div class="col-span-8">
+                      <textarea
+                        v-model="entry.value"
+                        placeholder="Variable value"
+                        rows="3"
+                        class="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
+                      ></textarea>
+                    </div>
+                    <div class="col-span-1">
+                      <button
+                        type="button"
+                        class="col-span-1 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 transition hover:border-rose-300"
+                        @click="removeVariable(index)"
+                      >
+                        X
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <p v-else class="text-xs text-slate-500 dark:text-slate-400">No variables defined.</p>
