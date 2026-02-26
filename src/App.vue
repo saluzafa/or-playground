@@ -281,7 +281,7 @@ function interpolateVariables(template: string) {
 }
 
 function addVariable() {
-  promptVariables.value = [...promptVariables.value, { name: '', value: '', inputType: 'textarea' }]
+  promptVariables.value = [...promptVariables.value, { name: '', value: '', inputType: 'text' }]
 }
 
 function removeVariable(index: number) {
