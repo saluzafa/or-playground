@@ -1235,7 +1235,7 @@ onBeforeUnmount(() => {
                 <div v-if="promptVariables.length" class="space-y-2">
                   <div
                     v-for="(entry, index) in promptVariables"
-                    :key="`${index}-${entry.name}`"
+                    :key="index"
                     class="grid grid-cols-12 gap-2"
                   >
                     <input
