@@ -43,6 +43,9 @@ const STORE_NAME = 'app-kv'
 const DIRECTORY_HANDLE_KEY = 'preset-directory-handle'
 const PRESET_QUERY_KEY = 'preset'
 const THEME_STORAGE_KEY = 'theme-preference'
+const DEFAULT_MODEL = 'openai/gpt-4.1-mini'
+const DEFAULT_SYSTEM_MESSAGE = 'You are a helpful assistant.'
+const DEFAULT_USER_MESSAGE = ''
 const DEFAULT_SETTINGS: RequestSettings = {
   apiKey: '',
   temperature: 0.7,
@@ -51,9 +54,9 @@ const DEFAULT_SETTINGS: RequestSettings = {
   reasoningEffort: 'medium',
 }
 
-const model = ref('openai/gpt-4.1-mini')
-const systemMessage = ref('You are a helpful assistant.')
-const userMessage = ref('')
+const model = ref(DEFAULT_MODEL)
+const systemMessage = ref(DEFAULT_SYSTEM_MESSAGE)
+const userMessage = ref(DEFAULT_USER_MESSAGE)
 const responseText = ref('')
 const responseReasoning = ref('')
 const responseJson = ref('')
@@ -521,6 +524,43 @@ async function savePreset() {
     await syncPresetsFromDirectory()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Unable to save preset.'
+  }
+}
+
+async function createNewPreset() {
+  if (!presetDirectoryHandle.value) {
+    errorMessage.value = 'Connect a preset directory first.'
+    return
+  }
+
+  const promptedName = window.prompt('Enter the name for the new preset:', 'New preset')
+  if (promptedName === null) {
+    return
+  }
+
+  const name = promptedName.trim() || 'New preset'
+  const now = new Date().toISOString()
+  const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`
+  const filename = `${id}-${cleanFilename(name)}.json`
+
+  const preset: PromptPreset = {
+    id,
+    filename,
+    name,
+    model: DEFAULT_MODEL,
+    systemMessage: DEFAULT_SYSTEM_MESSAGE,
+    userMessage: DEFAULT_USER_MESSAGE,
+    settings: { ...DEFAULT_SETTINGS },
+    updatedAt: now,
+  }
+
+  try {
+    await writePreset(preset)
+    presetName.value = preset.name
+    selectedPresetId.value = preset.id
+    await syncPresetsFromDirectory()
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'Unable to create preset.'
   }
 }
 
@@ -1115,11 +1155,20 @@ onBeforeUnmount(() => {
 
           <button
             type="button"
-            class="mb-4 w-full rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-emerald-300"
+            class="mb-2 w-full rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-emerald-300"
             :disabled="!presetDirectoryHandle"
             @click="savePreset"
           >
             Save Current As Preset
+          </button>
+
+          <button
+            type="button"
+            class="mb-4 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
+            :disabled="!presetDirectoryHandle"
+            @click="createNewPreset"
+          >
+            Create New Preset
           </button>
 
           <label class="mb-2 block">
