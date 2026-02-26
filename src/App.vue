@@ -12,12 +12,18 @@ interface RequestSettings {
   reasoningEffort: ReasoningEffort
 }
 
+interface PromptVariable {
+  name: string
+  value: string
+}
+
 interface PromptPreset {
   id: string
   name: string
   model: string
   systemMessage: string
   userMessage: string
+  variables: PromptVariable[]
   settings: RequestSettings
   updatedAt: string
   filename: string
@@ -59,6 +65,7 @@ const compareModel = ref('openai/gpt-4.1')
 const compareMode = ref(false)
 const systemMessage = ref(DEFAULT_SYSTEM_MESSAGE)
 const userMessage = ref(DEFAULT_USER_MESSAGE)
+const promptVariables = ref<PromptVariable[]>([])
 const responseText = ref('')
 const responseReasoning = ref('')
 const responseJson = ref('')
@@ -213,6 +220,73 @@ function toRequestSettings(value: unknown): RequestSettings {
       typeof source.reasoningEnabled === 'boolean' ? source.reasoningEnabled : DEFAULT_SETTINGS.reasoningEnabled,
     reasoningEffort: toReasoningEffort(source.reasoningEffort),
   }
+}
+
+function toPromptVariables(value: unknown): PromptVariable[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .filter((entry): entry is Record<string, unknown> => !!entry && typeof entry === 'object')
+    .map((entry) => ({
+      name: typeof entry.name === 'string' ? entry.name : '',
+      value: typeof entry.value === 'string' ? entry.value : '',
+    }))
+    .filter((entry) => !!entry.name.trim())
+}
+
+function snapshotVariables(): PromptVariable[] {
+  return promptVariables.value
+    .map((entry) => ({
+      name: entry.name.trim(),
+      value: entry.value,
+    }))
+    .filter((entry) => !!entry.name)
+}
+
+function applyVariables(nextVariables: PromptVariable[]) {
+  promptVariables.value = nextVariables.map((entry) => ({
+    name: entry.name,
+    value: entry.value,
+  }))
+}
+
+function interpolateVariables(template: string) {
+  const replacements = new Map<string, string>()
+
+  for (const entry of promptVariables.value) {
+    const key = entry.name.trim()
+    if (!key) {
+      continue
+    }
+    replacements.set(key, entry.value)
+  }
+
+  return template.replace(/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g, (token, key) => {
+    if (!replacements.has(key)) {
+      return token
+    }
+    return replacements.get(key) ?? ''
+  })
+}
+
+function addVariable() {
+  promptVariables.value = [...promptVariables.value, { name: '', value: '' }]
+}
+
+function removeVariable(index: number) {
+  promptVariables.value = promptVariables.value.filter((_, itemIndex) => itemIndex !== index)
+}
+
+function areVariablesEqual(left: PromptVariable[], right: PromptVariable[]) {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  return left.every(
+    (entry, index) => entry.name === right[index]?.name && entry.value === right[index]?.value,
+  )
 }
 
 function snapshotSettings(): RequestSettings {
@@ -371,6 +445,7 @@ async function syncPresetsFromDirectory() {
         model: typeof parsed.model === 'string' ? parsed.model : '',
         systemMessage: typeof parsed.systemMessage === 'string' ? parsed.systemMessage : '',
         userMessage: typeof parsed.userMessage === 'string' ? parsed.userMessage : '',
+        variables: toPromptVariables(parsed.variables),
         settings: toRequestSettings(
           parsed.settings && typeof parsed.settings === 'object'
             ? parsed.settings
@@ -498,6 +573,7 @@ async function writePreset(preset: PromptPreset) {
         model: preset.model,
         systemMessage: preset.systemMessage,
         userMessage: preset.userMessage,
+        variables: preset.variables,
         settings: preset.settings,
         updatedAt: preset.updatedAt,
       },
@@ -532,6 +608,7 @@ async function savePreset() {
     model: model.value,
     systemMessage: systemMessage.value,
     userMessage: userMessage.value,
+    variables: snapshotVariables(),
     settings: snapshotSettings(),
     updatedAt: now,
   }
@@ -569,6 +646,7 @@ async function createNewPreset() {
     model: DEFAULT_MODEL,
     systemMessage: DEFAULT_SYSTEM_MESSAGE,
     userMessage: DEFAULT_USER_MESSAGE,
+    variables: [],
     settings: { ...DEFAULT_SETTINGS },
     updatedAt: now,
   }
@@ -592,6 +670,7 @@ async function loadSelectedPreset() {
   model.value = selectedPreset.value.model
   systemMessage.value = selectedPreset.value.systemMessage
   userMessage.value = selectedPreset.value.userMessage
+  applyVariables(selectedPreset.value.variables)
   applySettings(selectedPreset.value.settings)
   presetName.value = selectedPreset.value.name
   await nextTick()
@@ -772,11 +851,13 @@ async function sendPrompt() {
   compareResponseJson.value = ''
 
   try {
+    const resolvedSystemMessage = interpolateVariables(systemMessage.value).trim()
+    const resolvedUserMessage = interpolateVariables(userMessage.value).trim()
     const messages: Array<{ role: 'system' | 'user'; content: string }> = []
-    if (systemMessage.value.trim()) {
-      messages.push({ role: 'system', content: systemMessage.value.trim() })
+    if (resolvedSystemMessage) {
+      messages.push({ role: 'system', content: resolvedSystemMessage })
     }
-    messages.push({ role: 'user', content: userMessage.value.trim() })
+    messages.push({ role: 'user', content: resolvedUserMessage })
 
     const primaryModel = model.value.trim()
     const secondaryModel = compareModel.value.trim()
@@ -928,6 +1009,7 @@ function hasSelectedPresetChanges() {
     model.value !== selectedPreset.value.model ||
     systemMessage.value !== selectedPreset.value.systemMessage ||
     userMessage.value !== selectedPreset.value.userMessage ||
+    !areVariablesEqual(promptVariables.value, selectedPreset.value.variables) ||
     settings.apiKey !== selectedPreset.value.settings.apiKey ||
     settings.temperature !== selectedPreset.value.settings.temperature ||
     settings.topP !== selectedPreset.value.settings.topP ||
@@ -951,6 +1033,7 @@ async function autoSaveSelectedPreset() {
     model: model.value,
     systemMessage: systemMessage.value,
     userMessage: userMessage.value,
+    variables: snapshotVariables(),
     settings: snapshotSettings(),
     updatedAt: new Date().toISOString(),
   }
@@ -985,6 +1068,14 @@ watch(
 watch([model, systemMessage, userMessage], () => {
   queueSelectedPresetAutoSave()
 })
+
+watch(
+  promptVariables,
+  () => {
+    queueSelectedPresetAutoSave()
+  },
+  { deep: true },
+)
 
 watch(
   () => ({ ...settings }),
@@ -1126,6 +1217,50 @@ onBeforeUnmount(() => {
                 <span class="mb-1 block text-sm font-semibold">User Message</span>
                 <CodeEditor v-model="userMessage" :dark="isDarkMode" aria-label="User Message" @mod-enter="sendPrompt" />
               </label>
+
+              <div class="mb-4 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                <div class="mb-2 flex items-center justify-between gap-2">
+                  <span class="text-sm font-semibold">Variables</span>
+                  <button
+                    type="button"
+                    class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold transition hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
+                    @click="addVariable"
+                  >
+                    Add Variable
+                  </button>
+                </div>
+                <p class="mb-3 text-xs text-slate-600 dark:text-slate-400">
+                  Use placeholders like <code>{my_var}</code> in System/User messages.
+                </p>
+                <div v-if="promptVariables.length" class="space-y-2">
+                  <div
+                    v-for="(entry, index) in promptVariables"
+                    :key="`${index}-${entry.name}`"
+                    class="grid grid-cols-12 gap-2"
+                  >
+                    <input
+                      v-model="entry.name"
+                      type="text"
+                      placeholder="my_var"
+                      class="col-span-4 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
+                    />
+                    <input
+                      v-model="entry.value"
+                      type="text"
+                      placeholder="Variable value"
+                      class="col-span-7 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
+                    />
+                    <button
+                      type="button"
+                      class="col-span-1 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 transition hover:border-rose-300"
+                      @click="removeVariable(index)"
+                    >
+                      X
+                    </button>
+                  </div>
+                </div>
+                <p v-else class="text-xs text-slate-500 dark:text-slate-400">No variables defined.</p>
+              </div>
 
               <div v-if="errorMessage" class="mb-4 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
                 {{ errorMessage }}
