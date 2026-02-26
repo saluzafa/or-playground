@@ -1583,7 +1583,10 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <div class="col-span-4">
+            <div
+              class="col-span-4 transition-all duration-200"
+              :class="isSending ? 'pointer-events-none select-none blur-[5px]' : ''"
+            >
               <div class="space-y-4">
                 <template v-if="!compareMode">
                   <div>
