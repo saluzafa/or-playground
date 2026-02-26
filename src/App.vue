@@ -1188,6 +1188,14 @@ function ensureActiveModelSuggestionVisible() {
 }
 
 function handleModelInputKeydown(event: KeyboardEvent) {
+  if (event.key === 'ArrowDown' && !showModelSuggestions.value && filteredModelSuggestions.value.length > 0) {
+    event.preventDefault()
+    isModelInputFocused.value = true
+    activeModelSuggestionIndex.value = 0
+    ensureActiveModelSuggestionVisible()
+    return
+  }
+
   if (!showModelSuggestions.value) {
     return
   }
