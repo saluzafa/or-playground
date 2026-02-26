@@ -92,7 +92,6 @@ let presetAutoSaveTimer: ReturnType<typeof setTimeout> | null = null
 let copyResponseTextTimer: ReturnType<typeof setTimeout> | null = null
 const suppressPresetAutoSave = ref(false)
 
-const presetName = ref('')
 const selectedPresetId = ref('')
 const presets = ref<PromptPreset[]>([])
 const syncingPresets = ref(false)
@@ -108,14 +107,6 @@ const canUseDirectoryApi = computed(() => typeof window !== 'undefined' && 'show
 const hasConnectedDirectory = computed(() => !!presetDirectoryHandle.value)
 
 const selectedPreset = computed(() => presets.value.find((preset) => preset.id === selectedPresetId.value) ?? null)
-const canRenameSelectedPreset = computed(() => {
-  if (!presetDirectoryHandle.value || !selectedPreset.value) {
-    return false
-  }
-
-  const nextName = presetName.value.trim()
-  return !!nextName && nextName !== selectedPreset.value.name
-})
 const filteredModelSuggestions = computed(() => {
   const query = model.value.trim().toLowerCase()
   const source = openRouterModels.value
@@ -771,7 +762,7 @@ async function savePreset() {
     return
   }
 
-  const defaultName = presetName.value.trim() || selectedPreset.value?.name || 'Untitled preset'
+  const defaultName = selectedPreset.value?.name || 'Untitled preset'
   const promptedName = window.prompt('Enter the name for the new preset:', defaultName)
   if (promptedName === null) {
     return
@@ -796,7 +787,6 @@ async function savePreset() {
 
   try {
     await writePreset(preset)
-    presetName.value = preset.name
     selectedPresetId.value = preset.id
     await syncPresetsFromDirectory()
   } catch (error) {
@@ -834,7 +824,6 @@ async function createNewPreset() {
 
   try {
     await writePreset(preset)
-    presetName.value = preset.name
     selectedPresetId.value = preset.id
     await syncPresetsFromDirectory()
   } catch (error) {
@@ -853,7 +842,6 @@ async function loadSelectedPreset() {
   userMessage.value = selectedPreset.value.userMessage
   applyVariables(selectedPreset.value.variables)
   applySettings(selectedPreset.value.settings)
-  presetName.value = selectedPreset.value.name
   await nextTick()
   suppressPresetAutoSave.value = false
 }
@@ -882,7 +870,12 @@ async function renameSelectedPreset() {
     return
   }
 
-  const nextName = presetName.value.trim()
+  const promptedName = window.prompt('Enter the new name for the selected preset:', selectedPreset.value.name)
+  if (promptedName === null) {
+    return
+  }
+
+  const nextName = promptedName.trim()
   if (!nextName || nextName === selectedPreset.value.name) {
     return
   }
@@ -1697,23 +1690,14 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <label class="mb-2 block">
-            <span class="mb-1 block text-xs font-semibold">Preset Name</span>
-            <input
-              v-model="presetName"
-              type="text"
-              placeholder="My coding preset"
-              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
-              @keydown.enter.prevent="renameSelectedPreset"
-            />
-          </label>
-
+          <span class="mb-1 block text-xs font-semibold">Presets Actions</span>
           <button
             type="button"
-            class="mb-2 w-full rounded-xl border text-white border-slate-300 px-3 py-2 text-sm font-semibold transition hover:border-slate-400 bg-emerald-600 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:text-neutral-400 disabled:bg-neutral-200 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
-            :disabled="!canRenameSelectedPreset"
+            class="mb-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold transition hover:border-slate-400 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
+            :disabled="!selectedPreset"
             @click="renameSelectedPreset"
           >
+            <i class="fas fa-pen-to-square fa-fw"></i>
             Rename Selected Preset
           </button>
 
