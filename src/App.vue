@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import CodeEditor from './components/CodeEditor.vue'
+import ModelSuggestionInput from './components/ModelSuggestionInput.vue'
 
 type ReasoningEffort = 'low' | 'medium' | 'high'
 type VariableInputType = 'text' | 'textarea'
@@ -81,9 +82,6 @@ const errorMessage = ref('')
 const isDarkMode = ref(false)
 const isSending = ref(false)
 const activeRequestController = ref<AbortController | null>(null)
-const isModelInputFocused = ref(false)
-const activeModelSuggestionIndex = ref(-1)
-const modelSuggestionListRef = ref<HTMLElement | null>(null)
 const isLoadingModels = ref(false)
 const modelLoadError = ref('')
 const openRouterModels = ref<OpenRouterModel[]>([])
@@ -109,17 +107,6 @@ const canUseDirectoryApi = computed(() => typeof window !== 'undefined' && 'show
 const hasConnectedDirectory = computed(() => !!presetDirectoryHandle.value)
 
 const selectedPreset = computed(() => presets.value.find((preset) => preset.id === selectedPresetId.value) ?? null)
-const filteredModelSuggestions = computed(() => {
-  const query = model.value.trim().toLowerCase()
-  const source = openRouterModels.value
-
-  if (!query) {
-    return source.slice(0, 12)
-  }
-
-  return source.filter((entry) => entry.id.toLowerCase().includes(query) || entry.name.toLowerCase().includes(query)).slice(0, 12)
-})
-const showModelSuggestions = computed(() => isModelInputFocused.value && filteredModelSuggestions.value.length > 0)
 
 const canSend = computed(
   () =>
@@ -1165,78 +1152,6 @@ async function loadOpenRouterModels() {
   }
 }
 
-function applyModelSuggestion(value: string) {
-  model.value = value
-  activeModelSuggestionIndex.value = -1
-  isModelInputFocused.value = false
-}
-
-function ensureActiveModelSuggestionVisible() {
-  nextTick(() => {
-    if (activeModelSuggestionIndex.value < 0) {
-      return
-    }
-
-    const list = modelSuggestionListRef.value
-    if (!list) {
-      return
-    }
-
-    const activeElement = list.querySelector<HTMLElement>(`[data-suggestion-index="${activeModelSuggestionIndex.value}"]`)
-    activeElement?.scrollIntoView({ block: 'nearest' })
-  })
-}
-
-function handleModelInputKeydown(event: KeyboardEvent) {
-  if (event.key === 'ArrowDown' && !showModelSuggestions.value && filteredModelSuggestions.value.length > 0) {
-    event.preventDefault()
-    isModelInputFocused.value = true
-    activeModelSuggestionIndex.value = 0
-    ensureActiveModelSuggestionVisible()
-    return
-  }
-
-  if (!showModelSuggestions.value) {
-    return
-  }
-
-  const maxIndex = filteredModelSuggestions.value.length - 1
-  if (maxIndex < 0) {
-    return
-  }
-
-  if (event.key === 'ArrowDown') {
-    event.preventDefault()
-    activeModelSuggestionIndex.value =
-      activeModelSuggestionIndex.value >= maxIndex ? 0 : activeModelSuggestionIndex.value + 1
-    ensureActiveModelSuggestionVisible()
-    return
-  }
-
-  if (event.key === 'ArrowUp') {
-    event.preventDefault()
-    activeModelSuggestionIndex.value =
-      activeModelSuggestionIndex.value <= 0 ? maxIndex : activeModelSuggestionIndex.value - 1
-    ensureActiveModelSuggestionVisible()
-    return
-  }
-
-  if (event.key === 'Enter' && activeModelSuggestionIndex.value >= 0) {
-    event.preventDefault()
-    const selectedSuggestion = filteredModelSuggestions.value[activeModelSuggestionIndex.value]
-    if (selectedSuggestion) {
-      applyModelSuggestion(selectedSuggestion.id)
-    }
-    return
-  }
-
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    activeModelSuggestionIndex.value = -1
-    isModelInputFocused.value = false
-  }
-}
-
 function clearPresetAutoSaveTimer() {
   if (presetAutoSaveTimer) {
     clearTimeout(presetAutoSaveTimer)
@@ -1334,17 +1249,6 @@ watch(
   { immediate: true },
 )
 
-watch(filteredModelSuggestions, (suggestions) => {
-  if (suggestions.length === 0) {
-    activeModelSuggestionIndex.value = -1
-    return
-  }
-
-  if (activeModelSuggestionIndex.value > suggestions.length - 1) {
-    activeModelSuggestionIndex.value = suggestions.length - 1
-  }
-})
-
 watch([model, systemMessage, userMessage], () => {
   queueSelectedPresetAutoSave()
 })
@@ -1433,38 +1337,13 @@ onBeforeUnmount(() => {
               <div class="mb-4 grid gap-4 sm:grid-cols-2">
                 <label class="block">
                   <span class="mb-1 block text-sm font-semibold">Model</span>
-                  <div class="relative">
-                    <input
-                      v-model="model"
-                      type="text"
-                      placeholder="openai/gpt-4.1-mini"
-                      class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none ring-0 transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
-                      @focus="isModelInputFocused = true"
-                      @blur="isModelInputFocused = false; activeModelSuggestionIndex = -1"
-                      @keydown="handleModelInputKeydown"
-                    />
-                    <div
-                      v-if="showModelSuggestions"
-                      ref="modelSuggestionListRef"
-                      class="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
-                    >
-                      <button
-                        v-for="(entry, index) in filteredModelSuggestions"
-                        :key="entry.id"
-                        type="button"
-                        :data-suggestion-index="index"
-                        class="block w-full rounded-lg px-3 py-2 text-left text-sm transition hover:bg-slate-100 dark:hover:bg-slate-800"
-                        :class="{ 'bg-slate-100 dark:bg-slate-800': index === activeModelSuggestionIndex }"
-                        @mouseenter="activeModelSuggestionIndex = index"
-                        @mousedown.prevent="applyModelSuggestion(entry.id)"
-                      >
-                        <div class="font-semibold text-slate-900 dark:text-slate-100">{{ entry.id }}</div>
-                        <div v-if="entry.name && entry.name !== entry.id" class="text-xs text-slate-500 dark:text-slate-400">{{ entry.name }}</div>
-                      </button>
-                    </div>
-                  </div>
-                  <span v-if="isLoadingModels" class="mt-1 block text-xs text-slate-500 dark:text-slate-400">Loading model suggestions...</span>
-                  <span v-else-if="modelLoadError" class="mt-1 block text-xs text-rose-600">{{ modelLoadError }}</span>
+                  <ModelSuggestionInput
+                    v-model="model"
+                    :suggestions="openRouterModels"
+                    :loading="isLoadingModels"
+                    :error="modelLoadError"
+                    placeholder="openai/gpt-4.1-mini"
+                  />
                 </label>
                 <div class="block">
                   <label class="flex items-center justify-between gap-3 mb-1">
@@ -1479,12 +1358,13 @@ onBeforeUnmount(() => {
                       />
                     </span>
                   </label>
-                  <input
+                  <ModelSuggestionInput
                     v-model="compareModel"
-                    type="text"
+                    :suggestions="openRouterModels"
+                    :loading="isLoadingModels"
+                    :error="modelLoadError"
                     :disabled="!compareMode"
                     placeholder="openai/gpt-4.1"
-                    class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none ring-0 transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300 disabled:opacity-30"
                   />
                 </div>
               </div>
@@ -1670,9 +1550,9 @@ onBeforeUnmount(() => {
                 </template>
 
                 <template v-else>
-                  <div class="grid grid-cols-12">
+                  <div class="grid grid-cols-12 gap-2">
                     <div class="col-span-6">
-                        <div class="space-y-4 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                      <div class="space-y-4 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
                         <h2 class="text-sm font-semibold">Model A: {{ model }}</h2>
                         <div class="grid gap-2 sm:grid-cols-2 text-[11px]">
                           <div class="rounded-xl border border-sky-100 bg-sky-50/70 py-1 px-2">
