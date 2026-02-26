@@ -1583,11 +1583,11 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <div
-              class="col-span-4 transition-all duration-200"
-              :class="isSending ? 'pointer-events-none select-none blur-[5px]' : ''"
-            >
-              <div class="space-y-4">
+            <div class="relative col-span-4">
+              <div
+                class="space-y-4 transition-all duration-200"
+                :class="isSending ? 'pointer-events-none select-none blur-[5px]' : ''"
+              >
                 <template v-if="!compareMode">
                   <div>
                     <h2 class="mb-2 text-sm font-semibold">Response Usage</h2>
@@ -1745,6 +1745,19 @@ onBeforeUnmount(() => {
                     </div>
                   </div>
                 </template>
+              </div>
+              <div
+                v-if="isSending"
+                class="pointer-events-none absolute inset-0 z-10 flex justify-center items-start"
+              >
+                <div class="rounded-lg border border-slate-300 bg-white/90 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm dark:border-slate-600 dark:bg-slate-900/90 dark:text-slate-200 space-y-4 text-center w-[10rem]">
+                  <div class="mb-2">
+                    <i class="fas fa-spinner fa-spin fa-2x"></i>
+                  </div>
+                  <div class="text-sm">
+                    Loading...
+                  </div>
+                </div>
               </div>
             </div>
           </div>
