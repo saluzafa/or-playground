@@ -1479,14 +1479,13 @@ onBeforeUnmount(() => {
                       />
                     </span>
                   </label>
-                  <label v-if="compareMode" class="block">
-                    <input
-                      v-model="compareModel"
-                      type="text"
-                      placeholder="openai/gpt-4.1"
-                      class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none ring-0 transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
-                    />
-                  </label>
+                  <input
+                    v-model="compareModel"
+                    type="text"
+                    :disabled="!compareMode"
+                    placeholder="openai/gpt-4.1"
+                    class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 outline-none ring-0 transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300 disabled:opacity-30"
+                  />
                 </div>
               </div>
 
