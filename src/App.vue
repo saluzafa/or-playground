@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import CodeEditor from './components/CodeEditor.vue'
 
 type ReasoningEffort = 'low' | 'medium' | 'high'
+type VariableInputType = 'text' | 'textarea'
 
 interface RequestSettings {
   apiKey: string
@@ -15,6 +16,7 @@ interface RequestSettings {
 interface PromptVariable {
   name: string
   value: string
+  inputType: VariableInputType
 }
 
 interface PromptPreset {
@@ -222,6 +224,10 @@ function toRequestSettings(value: unknown): RequestSettings {
   }
 }
 
+function toVariableInputType(value: unknown): VariableInputType {
+  return value === 'text' ? 'text' : 'textarea'
+}
+
 function toPromptVariables(value: unknown): PromptVariable[] {
   if (!Array.isArray(value)) {
     return []
@@ -232,6 +238,7 @@ function toPromptVariables(value: unknown): PromptVariable[] {
     .map((entry) => ({
       name: typeof entry.name === 'string' ? entry.name : '',
       value: typeof entry.value === 'string' ? entry.value : '',
+      inputType: toVariableInputType(entry.inputType),
     }))
     .filter((entry) => !!entry.name.trim())
 }
@@ -241,6 +248,7 @@ function snapshotVariables(): PromptVariable[] {
     .map((entry) => ({
       name: entry.name.trim(),
       value: entry.value,
+      inputType: entry.inputType,
     }))
     .filter((entry) => !!entry.name)
 }
@@ -249,6 +257,7 @@ function applyVariables(nextVariables: PromptVariable[]) {
   promptVariables.value = nextVariables.map((entry) => ({
     name: entry.name,
     value: entry.value,
+    inputType: toVariableInputType(entry.inputType),
   }))
 }
 
@@ -272,7 +281,7 @@ function interpolateVariables(template: string) {
 }
 
 function addVariable() {
-  promptVariables.value = [...promptVariables.value, { name: '', value: '' }]
+  promptVariables.value = [...promptVariables.value, { name: '', value: '', inputType: 'textarea' }]
 }
 
 function removeVariable(index: number) {
@@ -285,8 +294,20 @@ function areVariablesEqual(left: PromptVariable[], right: PromptVariable[]) {
   }
 
   return left.every(
-    (entry, index) => entry.name === right[index]?.name && entry.value === right[index]?.value,
+    (entry, index) =>
+      entry.name === right[index]?.name &&
+      entry.value === right[index]?.value &&
+      entry.inputType === right[index]?.inputType,
   )
+}
+
+function toggleVariableInputType(index: number) {
+  const variable = promptVariables.value[index]
+  if (!variable) {
+    return
+  }
+
+  variable.inputType = variable.inputType === 'textarea' ? 'text' : 'textarea'
 }
 
 function snapshotSettings(): RequestSettings {
@@ -1247,12 +1268,31 @@ onBeforeUnmount(() => {
                       />
                     </div>
                     <div class="col-span-8">
-                      <textarea
-                        v-model="entry.value"
-                        placeholder="Variable value"
-                        rows="3"
-                        class="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
-                      ></textarea>
+                      <div>
+                        <textarea
+                          v-if="entry.inputType === 'textarea'"
+                          v-model="entry.value"
+                          placeholder="Variable value"
+                          rows="3"
+                          class="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
+                        ></textarea>
+                        <input
+                          v-else
+                          v-model="entry.value"
+                          type="text"
+                          placeholder="Variable value"
+                          class="w-full mb-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
+                        />
+                      </div>
+                      <div class="flex justify-end">
+                        <button
+                          type="button"
+                          class="rounded-md border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-semibold transition hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
+                          @click="toggleVariableInputType(index)"
+                        >
+                          {{ entry.inputType === 'textarea' ? 'Use Text Input' : 'Use Textarea' }}
+                        </button>
+                      </div>
                     </div>
                     <div class="col-span-1">
                       <button
