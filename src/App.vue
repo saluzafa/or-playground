@@ -90,6 +90,8 @@ const userMessage = ref(DEFAULT_USER_MESSAGE)
 const userImageDataUrl = ref('')
 const userImageName = ref('')
 const userImageError = ref('')
+const isImageDropActive = ref(false)
+const imageDragDepth = ref(0)
 const promptVariables = ref<PromptVariable[]>([])
 const responseText = ref('')
 const responseReasoning = ref('')
@@ -134,7 +136,6 @@ const canSend = computed(
   () =>
     !!settings.apiKey.trim() &&
     !!model.value.trim() &&
-    (!!userMessage.value.trim() || !!userImageDataUrl.value) &&
     (!compareMode.value || !!compareModel.value.trim()),
 )
 
@@ -383,10 +384,8 @@ function clearUserImage() {
   userImageError.value = ''
 }
 
-async function handleUserImageChange(event: Event) {
+async function processUserImageFile(file: File | null) {
   userImageError.value = ''
-  const input = event.target as HTMLInputElement | null
-  const file = input?.files?.[0]
 
   if (!file) {
     clearUserImage()
@@ -396,9 +395,6 @@ async function handleUserImageChange(event: Event) {
   if (!file.type.startsWith('image/')) {
     clearUserImage()
     userImageError.value = 'Please select a valid image file.'
-    if (input) {
-      input.value = ''
-    }
     return
   }
 
@@ -409,10 +405,45 @@ async function handleUserImageChange(event: Event) {
   } catch (error) {
     clearUserImage()
     userImageError.value = error instanceof Error ? error.message : 'Unable to process image file.'
-    if (input) {
-      input.value = ''
-    }
   }
+}
+
+async function handleUserImageChange(event: Event) {
+  const input = event.target as HTMLInputElement | null
+  const file = input?.files?.[0]
+  await processUserImageFile(file ?? null)
+  if (input && userImageError.value) {
+    input.value = ''
+  }
+}
+
+function handleImageDragEnter(event: DragEvent) {
+  event.preventDefault()
+  imageDragDepth.value += 1
+  isImageDropActive.value = true
+}
+
+function handleImageDragOver(event: DragEvent) {
+  event.preventDefault()
+  if (!isImageDropActive.value) {
+    isImageDropActive.value = true
+  }
+}
+
+function handleImageDragLeave(event: DragEvent) {
+  event.preventDefault()
+  imageDragDepth.value = Math.max(0, imageDragDepth.value - 1)
+  if (imageDragDepth.value === 0) {
+    isImageDropActive.value = false
+  }
+}
+
+async function handleImageDrop(event: DragEvent) {
+  event.preventDefault()
+  isImageDropActive.value = false
+  imageDragDepth.value = 0
+  const file = event.dataTransfer?.files?.[0] ?? null
+  await processUserImageFile(file)
 }
 
 function escapeHtml(value: string): string {
@@ -1495,6 +1526,19 @@ onBeforeUnmount(() => {
                   class="mt-2 block w-full cursor-pointer rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
                   @change="handleUserImageChange"
                 />
+                <div
+                  v-if="!userImageName"
+                  class="mt-2 rounded-lg border border-dashed px-3 py-4 text-center text-xs transition h-[10rem] flex items-center justify-center"
+                  :class="isImageDropActive
+                    ? 'border-slate-900 bg-slate-100 text-slate-900 dark:border-slate-200 dark:bg-slate-800 dark:text-slate-100'
+                    : 'border-slate-300 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'"
+                  @dragenter="handleImageDragEnter"
+                  @dragover="handleImageDragOver"
+                  @dragleave="handleImageDragLeave"
+                  @drop="handleImageDrop"
+                >
+                  Drag and drop an image here
+                </div>
                 <p v-if="userImageName" class="mt-2 text-xs text-slate-600 dark:text-slate-400">
                   Selected: {{ userImageName }}
                 </p>
