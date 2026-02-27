@@ -24,6 +24,12 @@ interface PromptVariable {
   inputType: VariableInputType
 }
 
+interface PromptVariableSet {
+  id: string
+  name: string
+  variables: PromptVariable[]
+}
+
 interface PromptPreset {
   id: string
   name: string
@@ -31,6 +37,8 @@ interface PromptPreset {
   systemMessage: string
   userMessage: string
   variables: PromptVariable[]
+  variableSets: PromptVariableSet[]
+  activeVariableSetId: string
   settings: RequestSettings
   updatedAt: string
   filename: string
@@ -85,6 +93,7 @@ const DEFAULT_SETTINGS: RequestSettings = {
   reasoningEnabled: true,
   reasoningEffort: 'low',
 }
+const initialVariableSet = createVariableSet('Default')
 
 const model = ref(DEFAULT_MODEL)
 const compareModel = ref('openai/gpt-4.1')
@@ -97,7 +106,8 @@ const userImageError = ref('')
 const showOptionalImageSection = ref(false)
 const isImageDropActive = ref(false)
 const imageDragDepth = ref(0)
-const promptVariables = ref<PromptVariable[]>([])
+const promptVariableSets = ref<PromptVariableSet[]>([initialVariableSet])
+const selectedVariableSetId = ref(initialVariableSet.id)
 const responseText = ref('')
 const responseReasoning = ref('')
 const responseJson = ref('')
@@ -136,6 +146,10 @@ const canUseDirectoryApi = computed(() => typeof window !== 'undefined' && 'show
 const hasConnectedDirectory = computed(() => !!presetDirectoryHandle.value)
 
 const selectedPreset = computed(() => presets.value.find((preset) => preset.id === selectedPresetId.value) ?? null)
+const activeVariableSet = computed(
+  () => promptVariableSets.value.find((item) => item.id === selectedVariableSetId.value) ?? null,
+)
+const activePromptVariables = computed(() => activeVariableSet.value?.variables ?? [])
 
 const canSend = computed(
   () =>
@@ -238,6 +252,10 @@ function toVariableInputType(value: unknown): VariableInputType {
   return value === 'text' ? 'text' : 'textarea'
 }
 
+function createUniqueId() {
+  return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.floor(Math.random() * 10000)}`
+}
+
 function toPromptVariables(value: unknown): PromptVariable[] {
   if (!Array.isArray(value)) {
     return []
@@ -253,8 +271,49 @@ function toPromptVariables(value: unknown): PromptVariable[] {
     .filter((entry) => !!entry.name.trim())
 }
 
+function createVariableSet(name: string, variables: PromptVariable[] = []): PromptVariableSet {
+  return {
+    id: createUniqueId(),
+    name,
+    variables: variables.map((entry) => ({
+      name: entry.name,
+      value: entry.value,
+      inputType: toVariableInputType(entry.inputType),
+    })),
+  }
+}
+
+function toPromptVariableSets(value: unknown, legacyVariables: unknown): PromptVariableSet[] {
+  if (Array.isArray(value)) {
+    const parsedSets = value
+      .filter((entry): entry is Record<string, unknown> => !!entry && typeof entry === 'object')
+      .map((entry, index) => {
+        const parsedName = typeof entry.name === 'string' ? entry.name.trim() : ''
+        return {
+          id: typeof entry.id === 'string' && entry.id.trim() ? entry.id : createUniqueId(),
+          name: parsedName || `Set ${index + 1}`,
+          variables: toPromptVariables(entry.variables),
+        }
+      })
+
+    if (parsedSets.length) {
+      return parsedSets
+    }
+  }
+
+  const fallbackVariables = toPromptVariables(legacyVariables)
+  return [createVariableSet('Default', fallbackVariables)]
+}
+
+function resolveActiveVariableSetId(value: unknown, sets: PromptVariableSet[]) {
+  if (typeof value === 'string' && sets.some((entry) => entry.id === value)) {
+    return value
+  }
+  return sets[0]?.id ?? ''
+}
+
 function snapshotVariables(): PromptVariable[] {
-  return promptVariables.value
+  return activePromptVariables.value
     .map((entry) => ({
       name: entry.name.trim(),
       value: entry.value,
@@ -263,18 +322,42 @@ function snapshotVariables(): PromptVariable[] {
     .filter((entry) => !!entry.name)
 }
 
-function applyVariables(nextVariables: PromptVariable[]) {
-  promptVariables.value = nextVariables.map((entry) => ({
-    name: entry.name,
-    value: entry.value,
-    inputType: toVariableInputType(entry.inputType),
+function snapshotVariableSets(): PromptVariableSet[] {
+  return promptVariableSets.value.map((set, index) => ({
+    id: set.id,
+    name: set.name.trim() || `Set ${index + 1}`,
+    variables: set.variables
+      .map((entry) => ({
+        name: entry.name.trim(),
+        value: entry.value,
+        inputType: entry.inputType,
+      }))
+      .filter((entry) => !!entry.name),
   }))
+}
+
+function applyVariableSets(nextSets: PromptVariableSet[], activeSetId: string) {
+  const normalizedSets =
+    nextSets.length > 0
+      ? nextSets.map((set, index) => ({
+          id: set.id || createUniqueId(),
+          name: set.name.trim() || `Set ${index + 1}`,
+          variables: set.variables.map((entry) => ({
+            name: entry.name,
+            value: entry.value,
+            inputType: toVariableInputType(entry.inputType),
+          })),
+        }))
+      : [createVariableSet('Default')]
+
+  promptVariableSets.value = normalizedSets
+  selectedVariableSetId.value = resolveActiveVariableSetId(activeSetId, normalizedSets)
 }
 
 function interpolateVariables(template: string) {
   const replacements = new Map<string, string>()
 
-  for (const entry of promptVariables.value) {
+  for (const entry of activePromptVariables.value) {
     const key = entry.name.trim()
     if (!key) {
       continue
@@ -291,11 +374,19 @@ function interpolateVariables(template: string) {
 }
 
 function addVariable() {
-  promptVariables.value = [...promptVariables.value, { name: '', value: '', inputType: 'text' }]
+  const variableSet = activeVariableSet.value
+  if (!variableSet) {
+    return
+  }
+  variableSet.variables = [...variableSet.variables, { name: '', value: '', inputType: 'text' }]
 }
 
 function removeVariable(index: number) {
-  promptVariables.value = promptVariables.value.filter((_, itemIndex) => itemIndex !== index)
+  const variableSet = activeVariableSet.value
+  if (!variableSet) {
+    return
+  }
+  variableSet.variables = variableSet.variables.filter((_, itemIndex) => itemIndex !== index)
 }
 
 function areVariablesEqual(left: PromptVariable[], right: PromptVariable[]) {
@@ -311,13 +402,74 @@ function areVariablesEqual(left: PromptVariable[], right: PromptVariable[]) {
   )
 }
 
+function areVariableSetsEqual(left: PromptVariableSet[], right: PromptVariableSet[]) {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  return left.every(
+    (entry, index) =>
+      entry.id === right[index]?.id &&
+      entry.name === right[index]?.name &&
+      areVariablesEqual(entry.variables, right[index]?.variables ?? []),
+  )
+}
+
 function toggleVariableInputType(index: number) {
-  const variable = promptVariables.value[index]
+  const variable = activePromptVariables.value[index]
   if (!variable) {
     return
   }
 
   variable.inputType = variable.inputType === 'textarea' ? 'text' : 'textarea'
+}
+
+function addVariableSet() {
+  const defaultName = `Set ${promptVariableSets.value.length + 1}`
+  const promptedName = window.prompt('Enter a name for the new variable set:', defaultName)
+  if (promptedName === null) {
+    return
+  }
+
+  const name = promptedName.trim() || defaultName
+  const newSet = createVariableSet(name)
+  promptVariableSets.value = [...promptVariableSets.value, newSet]
+  selectedVariableSetId.value = newSet.id
+}
+
+function renameActiveVariableSet() {
+  const variableSet = activeVariableSet.value
+  if (!variableSet) {
+    return
+  }
+
+  const promptedName = window.prompt('Enter the new name for this variable set:', variableSet.name)
+  if (promptedName === null) {
+    return
+  }
+
+  const name = promptedName.trim()
+  if (!name) {
+    return
+  }
+
+  variableSet.name = name
+}
+
+function deleteActiveVariableSet() {
+  const variableSet = activeVariableSet.value
+  if (!variableSet || promptVariableSets.value.length <= 1) {
+    return
+  }
+
+  const shouldDelete = window.confirm(`Delete variable set "${variableSet.name}"?`)
+  if (!shouldDelete) {
+    return
+  }
+
+  const nextSets = promptVariableSets.value.filter((entry) => entry.id !== variableSet.id)
+  promptVariableSets.value = nextSets
+  selectedVariableSetId.value = nextSets[0]?.id ?? ''
 }
 
 function snapshotSettings(): RequestSettings {
@@ -711,6 +863,9 @@ async function syncPresetsFromDirectory() {
         continue
       }
 
+      const variableSets = toPromptVariableSets(parsed.variableSets, parsed.variables)
+      const activeVariableSetId = resolveActiveVariableSetId(parsed.activeVariableSetId, variableSets)
+
       nextPresets.push({
         id: typeof parsed.id === 'string' ? parsed.id : filename.replace(/\.json$/, ''),
         name: parsed.name,
@@ -718,6 +873,8 @@ async function syncPresetsFromDirectory() {
         systemMessage: typeof parsed.systemMessage === 'string' ? parsed.systemMessage : '',
         userMessage: typeof parsed.userMessage === 'string' ? parsed.userMessage : '',
         variables: toPromptVariables(parsed.variables),
+        variableSets,
+        activeVariableSetId,
         settings: toRequestSettings(
           parsed.settings && typeof parsed.settings === 'object'
             ? parsed.settings
@@ -846,6 +1003,8 @@ async function writePreset(preset: PromptPreset) {
         systemMessage: preset.systemMessage,
         userMessage: preset.userMessage,
         variables: preset.variables,
+        variableSets: preset.variableSets,
+        activeVariableSetId: preset.activeVariableSetId,
         settings: preset.settings,
         updatedAt: preset.updatedAt,
       },
@@ -870,7 +1029,7 @@ async function savePreset() {
 
   const name = promptedName.trim() || defaultName
   const now = new Date().toISOString()
-  const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`
+  const id = createUniqueId()
   const filename = `${id}-${cleanFilename(name)}.json`
 
   const preset: PromptPreset = {
@@ -881,6 +1040,8 @@ async function savePreset() {
     systemMessage: systemMessage.value,
     userMessage: userMessage.value,
     variables: snapshotVariables(),
+    variableSets: snapshotVariableSets(),
+    activeVariableSetId: selectedVariableSetId.value,
     settings: snapshotSettings(),
     updatedAt: now,
   }
@@ -916,8 +1077,9 @@ async function createNewPreset() {
 
   const name = promptedName.trim() || 'New preset'
   const now = new Date().toISOString()
-  const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`
+  const id = createUniqueId()
   const filename = `${id}-${cleanFilename(name)}.json`
+  const defaultVariableSet = createVariableSet('Default')
 
   const preset: PromptPreset = {
     id,
@@ -927,6 +1089,8 @@ async function createNewPreset() {
     systemMessage: DEFAULT_SYSTEM_MESSAGE,
     userMessage: DEFAULT_USER_MESSAGE,
     variables: [],
+    variableSets: [defaultVariableSet],
+    activeVariableSetId: defaultVariableSet.id,
     settings: { ...DEFAULT_SETTINGS },
     updatedAt: now,
   }
@@ -951,7 +1115,7 @@ async function loadSelectedPreset() {
   systemMessage.value = selectedPreset.value.systemMessage
   userMessage.value = selectedPreset.value.userMessage
   clearUserImage()
-  applyVariables(selectedPreset.value.variables)
+  applyVariableSets(selectedPreset.value.variableSets, selectedPreset.value.activeVariableSetId)
   applySettings(selectedPreset.value.settings)
   await nextTick()
   suppressPresetAutoSave.value = false
@@ -1327,7 +1491,8 @@ function hasSelectedPresetChanges() {
     model.value !== selectedPreset.value.model ||
     systemMessage.value !== selectedPreset.value.systemMessage ||
     userMessage.value !== selectedPreset.value.userMessage ||
-    !areVariablesEqual(promptVariables.value, selectedPreset.value.variables) ||
+    selectedVariableSetId.value !== selectedPreset.value.activeVariableSetId ||
+    !areVariableSetsEqual(promptVariableSets.value, selectedPreset.value.variableSets) ||
     settings.apiKey !== selectedPreset.value.settings.apiKey ||
     settings.temperature !== selectedPreset.value.settings.temperature ||
     settings.topP !== selectedPreset.value.settings.topP ||
@@ -1352,6 +1517,8 @@ async function autoSaveSelectedPreset() {
     systemMessage: systemMessage.value,
     userMessage: userMessage.value,
     variables: snapshotVariables(),
+    variableSets: snapshotVariableSets(),
+    activeVariableSetId: selectedVariableSetId.value,
     settings: snapshotSettings(),
     updatedAt: new Date().toISOString(),
   }
@@ -1388,12 +1555,16 @@ watch([model, systemMessage, userMessage], () => {
 })
 
 watch(
-  promptVariables,
+  promptVariableSets,
   () => {
     queueSelectedPresetAutoSave()
   },
   { deep: true },
 )
+
+watch(selectedVariableSetId, () => {
+  queueSelectedPresetAutoSave()
+})
 
 watch(
   () => ({ ...settings }),
@@ -1575,21 +1746,57 @@ onBeforeUnmount(() => {
 
               <div class="mb-4 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
                 <div class="mb-2 flex items-center justify-between gap-2">
-                  <span class="text-sm font-semibold">Variables</span>
+                  <span class="text-sm font-semibold">Variable Sets</span>
+                  <div class="flex gap-2">
+                    <button
+                      type="button"
+                      class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold transition hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
+                      @click="addVariableSet"
+                    >
+                      Add Set
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold transition hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
+                      :disabled="!activeVariableSet"
+                      @click="renameActiveVariableSet"
+                    >
+                      Rename Set
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 transition hover:border-rose-300 disabled:cursor-not-allowed disabled:opacity-60"
+                      :disabled="promptVariableSets.length <= 1 || !activeVariableSet"
+                      @click="deleteActiveVariableSet"
+                    >
+                      Delete Set
+                    </button>
+                  </div>
+                </div>
+                <p class="mb-3 text-xs text-slate-600 dark:text-slate-400">
+                  Use placeholders like <code>{my_var}</code> in System/User messages.
+                </p>
+                <div class="mb-3">
+                  <select
+                    v-model="selectedVariableSetId"
+                    class="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
+                  >
+                    <option v-for="set in promptVariableSets" :key="set.id" :value="set.id">{{ set.name }}</option>
+                  </select>
+                </div>
+                <div class="mb-3 flex justify-end">
                   <button
                     type="button"
                     class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold transition hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
+                    :disabled="!activeVariableSet"
                     @click="addVariable"
                   >
                     Add Variable
                   </button>
                 </div>
-                <p class="mb-3 text-xs text-slate-600 dark:text-slate-400">
-                  Use placeholders like <code>{my_var}</code> in System/User messages.
-                </p>
-                <div v-if="promptVariables.length" class="space-y-2">
+                <div v-if="activePromptVariables.length" class="space-y-2">
                   <div
-                    v-for="(entry, index) in promptVariables"
+                    v-for="(entry, index) in activePromptVariables"
                     :key="index"
                     class="grid grid-cols-12 gap-2"
                   >
@@ -1639,7 +1846,7 @@ onBeforeUnmount(() => {
                     </div>
                   </div>
                 </div>
-                <p v-else class="text-xs text-slate-500 dark:text-slate-400">No variables defined.</p>
+                <p v-else class="text-xs text-slate-500 dark:text-slate-400">No variables defined for this set.</p>
               </div>
 
               <div v-if="errorMessage" class="mb-4 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800">
