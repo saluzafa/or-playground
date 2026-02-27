@@ -1766,11 +1766,21 @@ onBeforeUnmount(() => {
                 <div class="mb-2 flex items-center justify-between gap-2">
                   <span class="text-sm font-semibold">Variable Sets</span>
                   <div class="flex gap-2">
+                    <label>
+                      Current set:
+                      <select
+                        v-model="selectedVariableSetId"
+                        class="w-auto rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
+                      >
+                        <option v-for="set in promptVariableSets" :key="set.id" :value="set.id">{{ set.name }}</option>
+                      </select>
+                    </label>
                     <button
                       type="button"
                       class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold transition hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
                       @click="addVariableSet"
                     >
+                      <i class="fas fa-plus fa-fw"></i>
                       Add Set
                     </button>
                     <button
@@ -1779,6 +1789,7 @@ onBeforeUnmount(() => {
                       :disabled="!activeVariableSet"
                       @click="duplicateActiveVariableSet"
                     >
+                      <i class="fas fa-copy fa-fw"></i>
                       Duplicate
                     </button>
                     <button
@@ -1787,14 +1798,16 @@ onBeforeUnmount(() => {
                       :disabled="!activeVariableSet"
                       @click="renameActiveVariableSet"
                     >
+                      <i class="fas fa-edit fa-fw"></i>
                       Rename Set
                     </button>
                     <button
                       type="button"
-                      class="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 transition hover:border-rose-300 disabled:cursor-not-allowed disabled:opacity-60"
+                      class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold transition hover:border-slate-400 dark:border-slate-700 dark:bg-red-950 dark:hover:border-slate-500"
                       :disabled="promptVariableSets.length <= 1 || !activeVariableSet"
                       @click="deleteActiveVariableSet"
                     >
+                      <i class="fas fa-trash fa-fw"></i>
                       Delete Set
                     </button>
                   </div>
@@ -1802,14 +1815,6 @@ onBeforeUnmount(() => {
                 <p class="mb-3 text-xs text-slate-600 dark:text-slate-400">
                   Use placeholders like <code>{my_var}</code> in System/User messages.
                 </p>
-                <div class="mb-3">
-                  <select
-                    v-model="selectedVariableSetId"
-                    class="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
-                  >
-                    <option v-for="set in promptVariableSets" :key="set.id" :value="set.id">{{ set.name }}</option>
-                  </select>
-                </div>
                 <div class="mb-3 flex justify-end">
                   <button
                     type="button"
