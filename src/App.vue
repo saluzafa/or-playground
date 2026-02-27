@@ -46,6 +46,25 @@ interface OpenRouterUsage {
   requestDurationSeconds: number | null
 }
 
+interface OpenRouterTextContentPart {
+  type: 'text'
+  text: string
+}
+
+interface OpenRouterImageContentPart {
+  type: 'image_url'
+  image_url: {
+    url: string
+  }
+}
+
+type OpenRouterMessageContent = string | Array<OpenRouterTextContentPart | OpenRouterImageContentPart>
+
+interface OpenRouterChatMessage {
+  role: 'system' | 'user'
+  content: OpenRouterMessageContent
+}
+
 const DB_NAME = 'or-playground-db'
 const DB_VERSION = 2
 const STORE_NAME = 'app-kv'
@@ -68,6 +87,9 @@ const compareModel = ref('openai/gpt-4.1')
 const compareMode = ref(false)
 const systemMessage = ref(DEFAULT_SYSTEM_MESSAGE)
 const userMessage = ref(DEFAULT_USER_MESSAGE)
+const userImageDataUrl = ref('')
+const userImageName = ref('')
+const userImageError = ref('')
 const promptVariables = ref<PromptVariable[]>([])
 const responseText = ref('')
 const responseReasoning = ref('')
@@ -112,7 +134,7 @@ const canSend = computed(
   () =>
     !!settings.apiKey.trim() &&
     !!model.value.trim() &&
-    !!userMessage.value.trim() &&
+    (!!userMessage.value.trim() || !!userImageDataUrl.value) &&
     (!compareMode.value || !!compareModel.value.trim()),
 )
 
@@ -338,6 +360,59 @@ function toTextContent(content: unknown): string {
       .join('\n')
   }
   return ''
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result)
+      } else {
+        reject(new Error('Unable to read image file.'))
+      }
+    }
+    reader.onerror = () => reject(new Error('Unable to read image file.'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function clearUserImage() {
+  userImageDataUrl.value = ''
+  userImageName.value = ''
+  userImageError.value = ''
+}
+
+async function handleUserImageChange(event: Event) {
+  userImageError.value = ''
+  const input = event.target as HTMLInputElement | null
+  const file = input?.files?.[0]
+
+  if (!file) {
+    clearUserImage()
+    return
+  }
+
+  if (!file.type.startsWith('image/')) {
+    clearUserImage()
+    userImageError.value = 'Please select a valid image file.'
+    if (input) {
+      input.value = ''
+    }
+    return
+  }
+
+  try {
+    const dataUrl = await readFileAsDataUrl(file)
+    userImageDataUrl.value = dataUrl
+    userImageName.value = file.name
+  } catch (error) {
+    clearUserImage()
+    userImageError.value = error instanceof Error ? error.message : 'Unable to process image file.'
+    if (input) {
+      input.value = ''
+    }
+  }
 }
 
 function escapeHtml(value: string): string {
@@ -823,6 +898,7 @@ async function createNewPreset() {
   try {
     await writePreset(preset)
     selectedPresetId.value = preset.id
+    clearUserImage()
     await syncPresetsFromDirectory()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Unable to create preset.'
@@ -838,6 +914,7 @@ async function loadSelectedPreset() {
   model.value = selectedPreset.value.model
   systemMessage.value = selectedPreset.value.systemMessage
   userMessage.value = selectedPreset.value.userMessage
+  clearUserImage()
   applyVariables(selectedPreset.value.variables)
   applySettings(selectedPreset.value.settings)
   await nextTick()
@@ -965,7 +1042,7 @@ function formatUsageDuration(value: number | null): string {
   })
 }
 
-async function runPromptRequest(targetModel: string, messages: Array<{ role: 'system' | 'user'; content: string }>) {
+async function runPromptRequest(targetModel: string, messages: OpenRouterChatMessage[]) {
   const requestStartedAt = performance.now()
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
@@ -1035,11 +1112,32 @@ async function sendPrompt() {
   try {
     const resolvedSystemMessage = interpolateVariables(systemMessage.value).trim()
     const resolvedUserMessage = interpolateVariables(userMessage.value).trim()
-    const messages: Array<{ role: 'system' | 'user'; content: string }> = []
+    const messages: OpenRouterChatMessage[] = []
     if (resolvedSystemMessage) {
       messages.push({ role: 'system', content: resolvedSystemMessage })
     }
-    messages.push({ role: 'user', content: resolvedUserMessage })
+
+    if (userImageDataUrl.value) {
+      const userContent: Array<OpenRouterTextContentPart | OpenRouterImageContentPart> = []
+      if (resolvedUserMessage) {
+        userContent.push({
+          type: 'text',
+          text: resolvedUserMessage,
+        })
+      }
+      userContent.push({
+        type: 'image_url',
+        image_url: {
+          url: userImageDataUrl.value,
+        },
+      })
+      messages.push({
+        role: 'user',
+        content: userContent,
+      })
+    } else {
+      messages.push({ role: 'user', content: resolvedUserMessage })
+    }
 
     const primaryModel = model.value.trim()
     const secondaryModel = compareModel.value.trim()
@@ -1378,6 +1476,36 @@ onBeforeUnmount(() => {
                 <span class="mb-1 block text-sm font-semibold">User Message</span>
                 <CodeEditor v-model="userMessage" :dark="isDarkMode" aria-label="User Message" @mod-enter="sendPrompt" />
               </label>
+
+              <div class="mt-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-sm font-semibold">Optional Image</span>
+                  <button
+                    v-if="userImageDataUrl"
+                    type="button"
+                    class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold transition hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
+                    @click="clearUserImage"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  class="mt-2 block w-full cursor-pointer rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
+                  @change="handleUserImageChange"
+                />
+                <p v-if="userImageName" class="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                  Selected: {{ userImageName }}
+                </p>
+                <img
+                  v-if="userImageDataUrl"
+                  :src="userImageDataUrl"
+                  alt="Selected user image preview"
+                  class="mt-2 max-h-44 w-auto rounded-lg border border-slate-200 object-contain dark:border-slate-700"
+                />
+                <p v-if="userImageError" class="mt-2 text-xs text-rose-600 dark:text-rose-400">{{ userImageError }}</p>
+              </div>
 
               <div class="mb-4 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
                 <div class="mb-2 flex items-center justify-between gap-2">
