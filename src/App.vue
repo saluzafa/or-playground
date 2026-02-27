@@ -437,6 +437,24 @@ function addVariableSet() {
   selectedVariableSetId.value = newSet.id
 }
 
+function duplicateActiveVariableSet() {
+  const variableSet = activeVariableSet.value
+  if (!variableSet) {
+    return
+  }
+
+  const defaultName = `${variableSet.name} Copy`
+  const promptedName = window.prompt('Enter a name for the duplicated variable set:', defaultName)
+  if (promptedName === null) {
+    return
+  }
+
+  const name = promptedName.trim() || defaultName
+  const duplicatedSet = createVariableSet(name, variableSet.variables)
+  promptVariableSets.value = [...promptVariableSets.value, duplicatedSet]
+  selectedVariableSetId.value = duplicatedSet.id
+}
+
 function renameActiveVariableSet() {
   const variableSet = activeVariableSet.value
   if (!variableSet) {
@@ -1754,6 +1772,14 @@ onBeforeUnmount(() => {
                       @click="addVariableSet"
                     >
                       Add Set
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold transition hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
+                      :disabled="!activeVariableSet"
+                      @click="duplicateActiveVariableSet"
+                    >
+                      Duplicate
                     </button>
                     <button
                       type="button"
