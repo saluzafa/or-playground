@@ -1101,8 +1101,8 @@ async function runPromptRequest(targetModel: string, messages: OpenRouterChatMes
         : {}),
     }),
   })
-  const requestDurationSeconds = (performance.now() - requestStartedAt) / 1000
   const payload = await response.json()
+  const requestDurationSeconds = (performance.now() - requestStartedAt) / 1000
 
   if (!response.ok) {
     const apiError =
