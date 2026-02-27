@@ -90,6 +90,7 @@ const userMessage = ref(DEFAULT_USER_MESSAGE)
 const userImageDataUrl = ref('')
 const userImageName = ref('')
 const userImageError = ref('')
+const showOptionalImageSection = ref(false)
 const isImageDropActive = ref(false)
 const imageDragDepth = ref(0)
 const promptVariables = ref<PromptVariable[]>([])
@@ -1508,47 +1509,64 @@ onBeforeUnmount(() => {
                 <CodeEditor v-model="userMessage" :dark="isDarkMode" aria-label="User Message" @mod-enter="sendPrompt" />
               </label>
 
-              <div class="mt-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
-                <div class="flex items-center justify-between gap-2">
-                  <span class="text-sm font-semibold">Optional Image</span>
-                  <button
-                    v-if="userImageDataUrl"
-                    type="button"
-                    class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold transition hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
-                    @click="clearUserImage"
+              <div class="mb-4 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                <div class="flex items-center grow justify-between gap-2">
+                  <div
+                    class="text-sm font-semibold w-full cursor-pointer"
+                    :aria-expanded="showOptionalImageSection"
+                    @click="showOptionalImageSection = !showOptionalImageSection"
                   >
-                    Remove
-                  </button>
+                    <span v-if="showOptionalImageSection">
+                      <i class="fas fa-caret-down fa-fw"></i>
+                    </span>
+                    <span v-else>
+                      <i class="fas fa-caret-right fa-fw"></i>
+                    </span>
+                    <span>Optional Image</span>
+                  </div>
+                  <div v-if="userImageName" class="text-xs">{{ userImageName }}</div>
+                  <div class="flex items-center gap-2">
+                    <button
+                      v-if="userImageDataUrl"
+                      type="button"
+                      class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold transition hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-500"
+                      @click="clearUserImage"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
-                <input
-                  type="file"
-                  accept="image/*"
-                  class="mt-2 block w-full cursor-pointer rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
-                  @change="handleUserImageChange"
-                />
-                <div
-                  v-if="!userImageName"
-                  class="mt-2 rounded-lg border border-dashed px-3 py-4 text-center text-xs transition h-[10rem] flex items-center justify-center"
-                  :class="isImageDropActive
-                    ? 'border-slate-900 bg-slate-100 text-slate-900 dark:border-slate-200 dark:bg-slate-800 dark:text-slate-100'
-                    : 'border-slate-300 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'"
-                  @dragenter="handleImageDragEnter"
-                  @dragover="handleImageDragOver"
-                  @dragleave="handleImageDragLeave"
-                  @drop="handleImageDrop"
-                >
-                  Drag and drop an image here
+                <div v-if="showOptionalImageSection">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    class="mt-2 block w-full cursor-pointer rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
+                    @change="handleUserImageChange"
+                  />
+                  <div
+                    v-if="!userImageName"
+                    class="mt-2 rounded-lg border border-dashed px-3 py-4 text-center text-xs transition h-[10rem] flex items-center justify-center"
+                    :class="isImageDropActive
+                      ? 'border-slate-900 bg-slate-100 text-slate-900 dark:border-slate-200 dark:bg-slate-800 dark:text-slate-100'
+                      : 'border-slate-300 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'"
+                    @dragenter="handleImageDragEnter"
+                    @dragover="handleImageDragOver"
+                    @dragleave="handleImageDragLeave"
+                    @drop="handleImageDrop"
+                  >
+                    Drag and drop an image here
+                  </div>
+                  <p v-if="userImageName" class="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                    Selected: {{ userImageName }}
+                  </p>
+                  <img
+                    v-if="userImageDataUrl"
+                    :src="userImageDataUrl"
+                    alt="Selected user image preview"
+                    class="mt-2 max-h-44 w-auto rounded-lg border border-slate-200 object-contain dark:border-slate-700"
+                  />
+                  <p v-if="userImageError" class="mt-2 text-xs text-rose-600 dark:text-rose-400">{{ userImageError }}</p>
                 </div>
-                <p v-if="userImageName" class="mt-2 text-xs text-slate-600 dark:text-slate-400">
-                  Selected: {{ userImageName }}
-                </p>
-                <img
-                  v-if="userImageDataUrl"
-                  :src="userImageDataUrl"
-                  alt="Selected user image preview"
-                  class="mt-2 max-h-44 w-auto rounded-lg border border-slate-200 object-contain dark:border-slate-700"
-                />
-                <p v-if="userImageError" class="mt-2 text-xs text-rose-600 dark:text-rose-400">{{ userImageError }}</p>
               </div>
 
               <div class="mb-4 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
