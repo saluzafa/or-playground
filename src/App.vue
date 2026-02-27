@@ -3,8 +3,12 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import CodeEditor from './components/CodeEditor.vue'
 import ModelSuggestionInput from './components/ModelSuggestionInput.vue'
 
-type ReasoningEffort = 'low' | 'medium' | 'high'
+type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
 type VariableInputType = 'text' | 'textarea'
+
+const REASONING_EFFORTS: Array<ReasoningEffort> = [
+  'none', 'minimal', 'low', 'medium', 'high', 'xhigh'
+];
 
 interface RequestSettings {
   apiKey: string
@@ -76,10 +80,10 @@ const DEFAULT_SYSTEM_MESSAGE = 'You are a helpful assistant.'
 const DEFAULT_USER_MESSAGE = ''
 const DEFAULT_SETTINGS: RequestSettings = {
   apiKey: '',
-  temperature: 0.7,
-  topP: 1,
+  temperature: 1.0,
+  topP: 1.0,
   reasoningEnabled: true,
-  reasoningEffort: 'medium',
+  reasoningEffort: 'low',
 }
 
 const model = ref(DEFAULT_MODEL)
@@ -212,8 +216,8 @@ function safeParse<T>(value: string | null, fallback: T): T {
 }
 
 function toReasoningEffort(value: unknown, fallback: ReasoningEffort = DEFAULT_SETTINGS.reasoningEffort): ReasoningEffort {
-  if (value === 'low' || value === 'medium' || value === 'high') {
-    return value
+  if (REASONING_EFFORTS.includes(String(value) as ReasoningEffort)) {
+    return value as ReasoningEffort
   }
   return fallback
 }
@@ -2013,9 +2017,7 @@ onBeforeUnmount(() => {
                   :disabled="!settings.reasoningEnabled"
                   class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-slate-300"
                 >
-                  <option value="low">low</option>
-                  <option value="medium">medium</option>
-                  <option value="high">high</option>
+                  <option v-for="value in REASONING_EFFORTS" :value="value">{{ value }}</option>
                 </select>
               </label>
             </div>
